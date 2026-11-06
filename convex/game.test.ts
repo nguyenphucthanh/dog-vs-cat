@@ -7,6 +7,7 @@ import {
   CHARGE_MS,
   MIN_POWER,
   OFFLINE_TURN_MS,
+  POWER_TOLERANCE,
   PROJECTILE_SPEED,
   TURN_MS,
   WALK_SPEED,
@@ -258,7 +259,7 @@ describe('shooting', () => {
     await t.mutation(api.game.fire, { token, gameId, power: 1, ...(await aim()) });
     const { lastShot } = await state();
     const speed = Math.hypot(lastShot!.velocity.x, lastShot!.velocity.y, lastShot!.velocity.z);
-    expect(speed).toBeCloseTo(PROJECTILE_SPEED * (MIN_POWER + 0.15));
+    expect(speed).toBeCloseTo(PROJECTILE_SPEED * (MIN_POWER + POWER_TOLERANCE));
   });
 
   it('allows full power after a full charge', async () => {

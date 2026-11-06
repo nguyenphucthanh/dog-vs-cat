@@ -1,6 +1,12 @@
 import { MAX_PITCH, POSE_INTERVAL_MS, SIM_DT } from '../../shared/game/constants';
 import { createBody, stepBody } from '../../shared/game/player';
-import { powerFromCharge, type Wind } from '../../shared/game/projectile';
+import {
+  aimToVelocity,
+  muzzlePosition,
+  powerFromCharge,
+  simulateProjectile,
+  type Wind,
+} from '../../shared/game/projectile';
 import { generateTerrain, type Vec3 } from '../../shared/game/terrain';
 import type { Outcome, Team } from '../../shared/game/turns';
 import type { FrameInput } from '../input/input';
@@ -139,6 +145,7 @@ export class NetworkMatch extends MatchCore implements MatchView {
 
   get power(): number {
     if (this.chargeMs !== null) return powerFromCharge(this.chargeMs);
+    if (this.myPlayerId === this.activeId) return 0; // My own bar never waits on the server.
     const started = this.snapshot.chargeStartedAt;
     return started === null ? 0 : powerFromCharge(this.serverNow() - started);
   }
@@ -189,7 +196,9 @@ export class NetworkMatch extends MatchCore implements MatchView {
     if (liveReplay) {
       this.ownsBody = false;
       this.target = null;
-      this.startReplay(shot);
+      this.adoptShot(shot);
+    } else if (isNewShot) {
+      this.cancelPrediction();
     }
 
     if (!this.isReplaying) this.applyServerPlayers();
@@ -290,8 +299,27 @@ export class NetworkMatch extends MatchCore implements MatchView {
       this.fireSent = true;
       this.fireNeedsRelease = true;
       this.chargeMs = null;
-      this.transport.fire(power, this.poseReport()).catch(() => {});
+      const pose = this.poseReport();
+      this.predictShot(power);
+      // If this fails the server still knows a charge began, and fires when the turn runs out.
+      this.transport.fire(power, pose).catch(() => this.cancelPrediction());
     }
+  }
+
+  /** A round trip is too slow for the moment of firing, so the shot leaves now and the server's result joins it. */
+  private predictShot(power: number): void {
+    const { id, body, yaw, pitch } = this.active;
+    const origin = muzzlePosition(body, yaw, pitch);
+    const velocity = aimToVelocity(yaw, pitch, power);
+    const { flightMs } = simulateProjectile({
+      terrain: this.terrain,
+      shooterId: id,
+      origin,
+      velocity,
+      wind: this.wind,
+      players: this.players.filter((p) => p.alive).map((p) => ({ id: p.id, x: p.body.x, y: p.body.y, z: p.body.z })),
+    });
+    this.startPrediction(origin, velocity, this.wind, flightMs);
   }
 
   private followActive(): void {

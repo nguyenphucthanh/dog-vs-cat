@@ -1,7 +1,7 @@
 'use client';
 
 import { useFrame, useThree } from '@react-three/fiber';
-import { useMemo, useRef, type RefObject } from 'react';
+import { memo, useMemo, useRef, type RefObject } from 'react';
 import { InstancedMesh, Matrix4, Object3D, Quaternion, Vector3, type Mesh } from 'three';
 import { MAP_SIZE, PLAYER_HEIGHT, WATER_SURFACE } from '../../shared/game/constants';
 import { aimToVelocity, muzzlePosition, previewArc } from '../../shared/game/projectile';
@@ -192,7 +192,7 @@ function ProjectileView({ match }: { match: MatchView }) {
   );
 }
 
-export function GameScene({
+function Scene({
   match,
   inputRef,
   statsRef,
@@ -238,3 +238,6 @@ export function GameScene({
     </>
   );
 }
+
+// Everything in here reads the match each frame, so parent re-renders have nothing to add.
+export const GameScene = memo(Scene);

@@ -124,6 +124,126 @@ describe('NetworkMatch', () => {
     });
   });
 
+  describe('firing without waiting for the server', () => {
+    const release = (match: NetworkMatch) => {
+      run(match, 32);
+      run(match, 400, FIRE);
+      run(match, 32);
+    };
+
+    it('sends the shot flying the moment fire is released', () => {
+      const { match, transport } = setup(snapshot({ wind: { x: 1, z: 0 } }));
+      release(match);
+      expect(transport.fire).toHaveBeenCalledTimes(1);
+      expect(match.projectile).not.toBeNull();
+      expect(match.phase).toBe('resolving');
+      expect(match.focus).not.toBeNull();
+    });
+
+    it('empties the power bar on release even though the server still says charging', () => {
+      const { match } = setup();
+      run(match, 32);
+      run(match, 400, FIRE);
+      match.sync(snapshot({ chargeStartedAt: Date.now() - 1000 }));
+      expect(match.power).toBeGreaterThan(0);
+      run(match, 32);
+      expect(match.power).toBe(0);
+    });
+
+    it('stops walking once the shot has left', () => {
+      const { match } = setup();
+      release(match);
+      const { z } = match.active.body;
+      run(match, 200, WALK);
+      expect(match.active.body.z).toBe(z);
+    });
+
+    it('waits at the predicted impact without inventing a result', () => {
+      const { match } = setup();
+      const them = match.players.find((p) => p.id === 'them')!;
+      const solid = match.terrain.blocks.filter(Boolean).length;
+      match.active.pitch = -1.4; // Straight down: lands almost at once.
+      release(match);
+      match.drainEffects();
+      run(match, 1000);
+      const landed = { ...match.projectile!.position };
+      run(match, 2000);
+      expect(match.phase).toBe('resolving');
+      expect(match.projectile!.position).toEqual(landed); // Doesn't sink through the ground while waiting.
+      expect(match.drainEffects()).toEqual([]);
+      expect(match.terrain.blocks.filter(Boolean).length).toBe(solid);
+      expect(them.hp).toBe(100);
+    });
+
+    it('joins the server result without restarting the flight', () => {
+      const { match } = setup();
+      match.active.pitch = 0.9; // Arcs up, so it is still in the air when the answer arrives.
+      release(match);
+      run(match, 300);
+      const flown = { ...match.projectile!.position };
+      const origin = { x: flown.x, y: flown.y + 50, z: flown.z };
+      const velocity = { ...match.projectile!.velocity };
+      const at = { x: 32.5, y: 40, z: 32.5 };
+      match.sync(
+        snapshot({
+          phase: 'resolving',
+          craters: [at],
+          lastShot: { turnNumber: 1, origin, velocity, wind: { x: 0, z: 0 }, flightMs: 400, impact: at, hits: [] },
+        }),
+      );
+      expect(match.projectile).not.toBeNull();
+      // Picked up 300 ms along the real path, not back at its start.
+      expect(match.projectile!.position).not.toEqual(origin);
+      match.drainEffects();
+      run(match, 150);
+      expect(match.drainEffects().map((e) => e.kind)).toEqual(['explosion']);
+    });
+
+    it('explodes as soon as the answer arrives if the shot already landed', () => {
+      const { match } = setup();
+      match.active.pitch = -1.4;
+      release(match);
+      run(match, 1500);
+      const { x, y, z } = match.projectile!.position;
+      const at = { x, y, z };
+      match.drainEffects();
+      match.sync(
+        snapshot({
+          phase: 'resolving',
+          craters: [at],
+          lastShot: {
+            turnNumber: 1,
+            origin: at,
+            velocity: { x: 0, y: 0, z: 0 },
+            wind: { x: 0, z: 0 },
+            flightMs: 10,
+            impact: at,
+            hits: [],
+          },
+        }),
+      );
+      run(match, 32);
+      expect(match.drainEffects().map((e) => e.kind)).toEqual(['explosion']);
+    });
+
+    it('gives control back if the server refuses the shot', async () => {
+      const { match, transport } = setup();
+      transport.fire.mockImplementation(() => Promise.reject(new Error('refused')));
+      release(match);
+      await flush();
+      expect(match.projectile).toBeNull();
+      expect(match.phase).toBe('aiming');
+    });
+
+    it('drops the prediction if the turn moves on without it', () => {
+      const { match } = setup();
+      release(match);
+      match.sync(snapshot({ turnNumber: 2, activePlayerId: 'them' }));
+      expect(match.projectile).toBeNull();
+      expect(match.drainEffects().filter((e) => e.kind === 'splash')).toEqual([]);
+    });
+  });
+
   describe('watching someone else', () => {
     const watching = () => setup(snapshot({ activePlayerId: 'them' }));
     const poseOf = (match: NetworkMatch, overrides: Partial<LivePose> = {}): LivePose => {

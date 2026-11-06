@@ -22,6 +22,8 @@ type Replay = {
   elapsedMs: number;
   pauseLeftMs: number;
   exploded: boolean;
+  /** Flying on this client's own prediction, with the real result still on its way from the server. */
+  pending: boolean;
 };
 
 export const STEP_MS = SIM_DT * 1000;
@@ -111,7 +113,36 @@ export abstract class MatchCore {
       elapsedMs: 0,
       pauseLeftMs: EXPLOSION_PAUSE_MS,
       exploded: false,
+      pending: false,
     };
+  }
+
+  /** Starts the shot flying at once. It waits at the predicted impact if the server hasn't answered by then. */
+  protected startPrediction(origin: Vec3, velocity: Vec3, wind: Wind, flightMs: number): void {
+    this.startReplay({ origin, velocity, wind, flightMs, impact: null, hits: [] });
+    this.replay!.pending = true;
+  }
+
+  /** Swaps a predicted flight for the real shot, keeping the time already flown so nothing visibly restarts. */
+  protected adoptShot(shot: ReplayShot): void {
+    const replay = this.replay;
+    if (!replay?.pending) {
+      this.startReplay(shot);
+      return;
+    }
+    const position = { ...shot.origin };
+    const velocity = { ...shot.velocity };
+    const steps = Math.floor(Math.min(replay.elapsedMs, shot.flightMs) / STEP_MS);
+    for (let step = 0; step < steps; step++) stepProjectile(position, velocity, shot.wind);
+    replay.shot = shot;
+    replay.position = position;
+    replay.velocity = velocity;
+    replay.pending = false;
+  }
+
+  /** Drops a prediction the server never confirmed. A confirmed replay is left alone. */
+  protected cancelPrediction(): void {
+    if (this.replay?.pending) this.replay = null;
   }
 
   /** Advances one step. Returns true on the step the replay ends. */
@@ -119,9 +150,10 @@ export abstract class MatchCore {
     const replay = this.replay;
     if (!replay) return false;
     if (!replay.exploded) {
+      if (replay.pending && replay.elapsedMs >= replay.shot.flightMs) return false;
       replay.elapsedMs += STEP_MS;
       stepProjectile(replay.position, replay.velocity, replay.shot.wind);
-      if (replay.elapsedMs >= replay.shot.flightMs) this.reveal(replay);
+      if (!replay.pending && replay.elapsedMs >= replay.shot.flightMs) this.reveal(replay);
       return false;
     }
     for (const hit of replay.shot.hits) {
@@ -136,6 +168,7 @@ export abstract class MatchCore {
 
   /** Jumps to the end. The computed result is the truth, whatever the animation ended up doing. */
   protected finishReplay(): void {
+    this.cancelPrediction(); // A prediction has no result to reveal.
     const replay = this.replay;
     if (!replay) return;
     if (!replay.exploded) this.reveal(replay);

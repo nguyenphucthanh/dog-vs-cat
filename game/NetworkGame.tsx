@@ -5,6 +5,7 @@ import { useConvex, useMutation, useQuery } from 'convex/react';
 import type { FunctionReturnType } from 'convex/server';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../convex/_generated/api';
+import type { Id } from '../convex/_generated/dataModel';
 import { errorMessage } from '../lib/guest';
 import { strings } from '../lib/strings';
 import { GameHud } from './hud/GameHud';
@@ -43,10 +44,8 @@ function Stage({ token, code, state }: { token: string; code: string; state: Gam
   const inputRef = useRef<InputSource | null>(null);
   const statsRef = useRef<FrameStats>({ fps: 0, hideActive: false });
   const isWatching = state.activePlayerId !== state.myPlayerId && state.status === 'active';
-  const pose = useQuery(api.game.pose, isWatching ? { gameId } : 'skip');
 
   useEffect(() => match.sync(state), [match, state]);
-  useEffect(() => match.syncPose(pose ?? null), [match, pose]);
 
   useEffect(() => {
     const input = createDesktopInput(containerRef.current!, setLocked);
@@ -82,6 +81,7 @@ function Stage({ token, code, state }: { token: string; code: string; state: Gam
 
   return (
     <div ref={containerRef} className="fixed inset-0 overflow-hidden bg-sky-300">
+      {isWatching && <PoseFeed match={match} gameId={gameId} />}
       <Canvas flat shadows dpr={[1, 1.5]} camera={{ fov: 70, near: 0.1, far: 400, position: [32, 30, 70] }}>
         <GameScene match={match} inputRef={inputRef} statsRef={statsRef} />
       </Canvas>
@@ -93,6 +93,16 @@ function Stage({ token, code, state }: { token: string; code: string; state: Gam
       />
     </div>
   );
+}
+
+/** Its own component so several pose updates a second don't re-render the whole scene. */
+function PoseFeed({ match, gameId }: { match: NetworkMatch; gameId: Id<'games'> }) {
+  const pose = useQuery(api.game.pose, { gameId });
+  useEffect(() => {
+    match.syncPose(pose ?? null);
+    return () => match.syncPose(null);
+  }, [match, pose]);
+  return null;
 }
 
 function BackToRoom({ token, code }: { token: string; code: string }) {

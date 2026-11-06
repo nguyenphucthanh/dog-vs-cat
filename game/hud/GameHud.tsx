@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type ReactNode, type RefObject } from 'react';
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { strings } from '../../lib/strings';
 import { WIND_MAX } from '../../shared/game/constants';
 import type { MatchView } from '../match/matchView';
@@ -22,13 +22,31 @@ function readHud(match: MatchView, fps: number) {
     showAim: match.showAimUi,
     activeTeam: active.team,
     secondsLeft: Math.max(0, Math.ceil(match.phaseMsLeft / 1000)),
-    power: match.power,
     windAngle: (Math.atan2(windRight, windAhead) * 180) / Math.PI,
     windStrength: Math.hypot(match.wind.x, match.wind.z) / WIND_MAX,
     winner: match.winner,
     fps,
     players: match.players.map((p) => ({ id: p.id, name: p.name, team: p.team, hp: p.hp, alive: p.alive })),
   };
+}
+
+/** Painted every frame straight onto the element: a smooth bar can't wait for React state. */
+function PowerFill({ match }: { match: MatchView }) {
+  const fillRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    let frame = requestAnimationFrame(function paint() {
+      fillRef.current!.style.transform = `scaleX(${match.power})`;
+      frame = requestAnimationFrame(paint);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [match]);
+  return (
+    <div
+      ref={fillRef}
+      className="h-full origin-left bg-gradient-to-r from-yellow-300 to-red-500"
+      style={{ transform: 'scaleX(0)' }}
+    />
+  );
 }
 
 const TEAM_TEXT = { dog: 'text-amber-300', cat: 'text-slate-200' };
@@ -102,11 +120,8 @@ export function GameHud({
 
       <div className="absolute bottom-10 left-1/2 w-80 -translate-x-1/2">
         <div className="mb-1 text-center text-xs opacity-80">{strings.power}</div>
-        <div className="h-5 border-2 border-black/60 bg-black/50">
-          <div
-            className="h-full bg-gradient-to-r from-yellow-300 to-red-500"
-            style={{ width: `${hud.power * 100}%` }}
-          />
+        <div className="h-5 overflow-hidden border-2 border-black/60 bg-black/50">
+          <PowerFill match={match} />
         </div>
       </div>
       <div className="absolute bottom-2 left-1/2 -translate-x-1/2 whitespace-nowrap text-xs opacity-80">
