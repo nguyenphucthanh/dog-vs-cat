@@ -50,6 +50,12 @@ export const strings = {
   backHome: 'Về trang chủ',
   emptyTeam: 'Chưa có ai',
   yourTurn: 'Lượt của bạn!',
+  next: 'Kế tiếp',
+  minimap: 'Bản đồ nhỏ: vị trí của mọi người chơi trên đảo',
+  youWon: 'Bạn thắng!',
+  youLost: 'Bạn thua!',
+  winnerTag: 'Thắng',
+  turnsPlayed: (turns: number) => `Sau ${turns} lượt`,
   backToRoom: 'Về phòng',
   teams: { dog: 'Chó', cat: 'Mèo' },
   phases: {

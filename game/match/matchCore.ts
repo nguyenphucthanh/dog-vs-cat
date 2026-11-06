@@ -35,6 +35,7 @@ const CHUNK_SIZE = 16;
  * outcome is already known by revealing it over time on the visible terrain.
  */
 export abstract class MatchCore {
+  terrainVersion = 0;
   private accumulatorMs = 0;
   private effects: MatchEffect[] = [];
   private dirtyChunks = new Set<number>();
@@ -93,6 +94,7 @@ export abstract class MatchCore {
 
   protected carve(center: Vec3): void {
     carveSphere(this.terrain, { ...center, radius: CRATER_RADIUS });
+    this.terrainVersion += 1;
     // One block of padding: faces of a neighbouring chunk can become exposed.
     const reach = CRATER_RADIUS + 1;
     const toChunk = (value: number) => Math.floor(value / CHUNK_SIZE);

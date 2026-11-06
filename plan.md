@@ -250,7 +250,7 @@ Vì không có đăng nhập, token guest là thứ duy nhất chứng minh danh
 **Xong khi:** hai máy khác nhau chơi trọn một trận qua URL thật. `convex-test` qua các trường hợp bắn sai lượt, bắn hai phát, timeout chạy muộn, tự bắn khi hết giờ lúc đang gồng, vào lại sau khi mất kết nối, mất 3 lượt thì chết. Theo dõi số function call trong dashboard Convex, đối chiếu với hạn mức gói miễn phí.
 
 ### M5: HUD đầy đủ
-- Minimap, chỉ báo gió, danh sách lượt kèm HP, tên và thanh máu trên đầu, thông báo tới lượt, bảng kết quả.
+- Minimap, chỉ báo gió, danh sách lượt kèm HP, tên và thanh máu trên đầu, thanh thời gian, thông báo tới lượt, bảng kết quả.
 
 **Xong khi:** người mới biết đang tới lượt ai, gió thế nào, còn bao lâu mà không cần hỏi.
 

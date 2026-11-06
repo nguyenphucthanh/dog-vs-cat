@@ -21,6 +21,7 @@ function snapshot(overrides: Partial<GameSnapshot> = {}): GameSnapshot {
     phaseEndsAt: Date.now() + TURN_MS,
     chargeStartedAt: null,
     wind: { x: 0, z: 0 },
+    order: { dog: ['me'], cat: ['them'], dogIndex: 0, catIndex: 0, nextTeam: 'cat' },
     myPlayerId: 'me',
     players: [
       { id: 'me', team: 'dog', name: 'Me', hp: 100, alive: true, ...spawns.dog[0], yaw: 0, pitch: 0.2 },
@@ -466,6 +467,34 @@ describe('NetworkMatch', () => {
     expect(match.phaseMsLeft).toBeGreaterThan(4_000);
     match.setClockOffset(50_000);
     expect(match.phaseMsLeft).toBe(0);
+  });
+
+  it("keeps a shot's victim alive in the turn list until the replay reveals the death", () => {
+    const at = { x: 32.5, y: 40, z: 32.5 };
+    const dying = snapshot({
+      phase: 'resolving',
+      craters: [at],
+      lastShot: {
+        turnNumber: 1,
+        origin: at,
+        velocity: { x: 0, y: 0, z: 0 },
+        wind: { x: 0, z: 0 },
+        flightMs: 100,
+        impact: at,
+        hits: [
+          { playerId: 'them', damage: 100, knockback: { x: 0, y: 0, z: 0 }, finalPos: at, hpAfter: 0, died: true },
+        ],
+      },
+    });
+    dying.players[1] = { ...dying.players[1], hp: 0, alive: false };
+    const { match } = setup();
+    const version = match.terrainVersion;
+    match.sync(dying);
+    expect(match.turnQueue).toEqual(['me', 'them']);
+    expect(match.players.find((p) => p.id === 'them')!.alive).toBe(true);
+    expect(match.terrainVersion).toBe(version);
+    run(match, 150);
+    expect(match.terrainVersion).toBe(version + 1);
   });
 
   it('reports the end of the match', () => {

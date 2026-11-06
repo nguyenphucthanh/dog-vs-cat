@@ -122,6 +122,13 @@ describe('starting a match', () => {
     expect(new Set(ids).size).toBe(4);
   });
 
+  it('exposes who plays next, after the active player', async () => {
+    const { state } = await startedGame(2);
+    const { order, activePlayerId, players } = await state();
+    expect([...order.dog, ...order.cat].sort()).toEqual(players.map((p) => p.id).sort());
+    expect(order[order.nextTeam]).not.toContain(activePlayerId);
+  });
+
   it('gives each player a spawn on their own half', async () => {
     const { state } = await startedGame(2);
     for (const player of (await state()).players) {

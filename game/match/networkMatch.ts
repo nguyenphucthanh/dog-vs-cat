@@ -9,7 +9,7 @@ import {
   type Wind,
 } from '../../shared/game/projectile';
 import { generateTerrain, type Vec3 } from '../../shared/game/terrain';
-import type { Outcome, Team } from '../../shared/game/turns';
+import { turnQueue, type Outcome, type Team, type TurnOrder } from '../../shared/game/turns';
 import type { FrameInput } from '../input/input';
 import { MatchCore, STEP_MS, type ReplayShot } from './matchCore';
 import type { MatchPlayer, MatchView, Phase } from './matchView';
@@ -34,6 +34,7 @@ export type GameSnapshot = {
   phaseEndsAt: number;
   chargeStartedAt: number | null;
   wind: Wind;
+  order: TurnOrder;
   myPlayerId: string | null;
   players: ServerPlayer[];
   craters: Vec3[];
@@ -128,6 +129,10 @@ export class NetworkMatch extends MatchCore implements MatchView {
 
   get active(): MatchPlayer {
     return this.player(this.activeId);
+  }
+
+  get turnQueue(): string[] {
+    return turnQueue(this.activeId, this.snapshot.order, (id) => this.player(id).alive);
   }
 
   get controllable(): boolean {

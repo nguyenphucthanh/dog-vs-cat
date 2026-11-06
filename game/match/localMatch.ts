@@ -7,6 +7,7 @@ import {
   createTurnOrder,
   matchOutcome,
   nextTurn,
+  turnQueue,
   type Outcome,
   type Team,
   type TurnOrder,
@@ -59,6 +60,10 @@ export class LocalMatch extends MatchCore implements MatchView {
 
   get active(): MatchPlayer {
     return this.player(this.activeId);
+  }
+
+  get turnQueue(): string[] {
+    return turnQueue(this.activeId, this.order, (id) => this.player(id).alive);
   }
 
   get power(): number {

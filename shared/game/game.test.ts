@@ -30,7 +30,7 @@ import {
   topSolidY,
   type Terrain,
 } from './terrain';
-import { createTurnOrder, matchOutcome, nextTurn } from './turns';
+import { createTurnOrder, matchOutcome, nextTurn, turnQueue } from './turns';
 import { initialWind, nextWind } from './wind';
 
 const GROUND_TOP = 10; // Feet height when standing on flatWorld().
@@ -415,6 +415,13 @@ describe('turn order', () => {
     expect(nextTurn(order, (id) => id !== 'd1')!.playerId).toBe('d2');
     expect(nextTurn(order, (id) => id === 'c1')!.playerId).toBe('c1');
     expect(nextTurn(order, () => false)).toBeNull();
+  });
+
+  it('lists players in the order they will play, with the dead last', () => {
+    const order = { dog: ['d1', 'd2', 'd3'], cat: ['c1', 'c2'], dogIndex: 1, catIndex: 1, nextTeam: 'cat' as const };
+    expect(turnQueue('d1', order, allAlive)).toEqual(['d1', 'c2', 'd2', 'c1', 'd3']);
+    expect(turnQueue('d1', order, (id) => id !== 'c2')).toEqual(['d1', 'c1', 'd2', 'd3', 'c2']);
+    expect(turnQueue('d1', order, () => false)).toEqual(['d1', 'd2', 'd3', 'c1', 'c2']);
   });
 
   it('shuffles reproducibly from the seed and keeps everyone', () => {

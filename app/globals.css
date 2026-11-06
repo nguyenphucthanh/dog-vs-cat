@@ -24,3 +24,40 @@ body {
   background: var(--background);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Announces a new turn, then gets out of the way. */
+.turn-banner {
+  animation: turn-banner 1.8s ease-out forwards;
+}
+
+@keyframes turn-banner {
+  0% {
+    opacity: 0;
+    scale: 0.85;
+  }
+  15%,
+  70% {
+    opacity: 1;
+    scale: 1;
+  }
+  100% {
+    opacity: 0;
+    scale: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .turn-banner {
+    animation-name: turn-banner-fade;
+  }
+
+  @keyframes turn-banner-fade {
+    0%,
+    70% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+}

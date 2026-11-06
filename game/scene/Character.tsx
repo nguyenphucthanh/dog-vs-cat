@@ -6,6 +6,7 @@ import type { Group, Mesh } from 'three';
 import type { Team } from '../../shared/game/turns';
 import type { MatchPlayer, MatchView } from '../match/matchView';
 import type { FrameStats } from './GameScene';
+import { PlayerLabel } from './PlayerLabel';
 
 const AIRBORNE_LEG_SPLIT = 0.7;
 
@@ -89,7 +90,7 @@ export function Character({
     const marker = markerRef.current!;
     // While the camera sits on this player's shoulder the marker would only block the view.
     marker.visible = match.activeId === player.id && match.focus !== null;
-    marker.position.y = 2.35 + Math.sin(clock.elapsedTime * 4) * 0.08;
+    marker.position.y = 2.95 + Math.sin(clock.elapsedTime * 4) * 0.08;
   });
 
   return (
@@ -115,6 +116,7 @@ export function Character({
         <Box size={[0.17, 0.17, 1.2]} position={[0, 0, -0.25]} color="#39453a" />
         <Box size={[0.23, 0.23, 0.14]} position={[0, 0, -0.86]} color="#222822" />
       </group>
+      <PlayerLabel match={match} player={player} />
       <mesh ref={markerRef} rotation={[Math.PI, 0, 0]}>
         <coneGeometry args={[0.18, 0.3, 4]} />
         <meshBasicMaterial color="#ffd23f" />

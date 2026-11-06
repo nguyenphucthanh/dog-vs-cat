@@ -2,17 +2,21 @@
 
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { strings } from '../../lib/strings';
-import { WIND_MAX } from '../../shared/game/constants';
+import { RETREAT_MS, TURN_MS, WIND_MAX } from '../../shared/game/constants';
 import type { MatchView } from '../match/matchView';
 import type { FrameStats } from '../scene/GameScene';
+import { Minimap } from './Minimap';
+
+const REFRESH_MS = 100; // Text and lists. Anything that moves smoothly paints itself every frame instead.
+const LOW_TIME_RATIO = 0.2;
+const SHOW_FPS = process.env.NODE_ENV !== 'production';
+
+const TEAM_TEXT = { dog: 'text-amber-300', cat: 'text-slate-200' };
+const TEAM_BAR = { dog: 'bg-amber-400', cat: 'bg-slate-300' };
 
 function readHud(match: MatchView, fps: number) {
   const active = match.active;
-  // Wind direction relative to where the camera faces, so the arrow reads "blowing that way".
-  const forward = { x: -Math.sin(active.yaw), z: -Math.cos(active.yaw) };
-  const right = { x: Math.cos(active.yaw), z: -Math.sin(active.yaw) };
-  const windAhead = match.wind.x * forward.x + match.wind.z * forward.z;
-  const windRight = match.wind.x * right.x + match.wind.z * right.z;
+  const queue = match.turnQueue.map((id) => match.players.find((p) => p.id === id)!);
   return {
     phase: match.phase,
     turnNumber: match.turnNumber,
@@ -22,37 +26,186 @@ function readHud(match: MatchView, fps: number) {
     showAim: match.showAimUi,
     activeTeam: active.team,
     secondsLeft: Math.max(0, Math.ceil(match.phaseMsLeft / 1000)),
-    windAngle: (Math.atan2(windRight, windAhead) * 180) / Math.PI,
-    windStrength: Math.hypot(match.wind.x, match.wind.z) / WIND_MAX,
+    windStrength: Math.hypot(match.wind.x, match.wind.z),
     winner: match.winner,
+    myTeam: match.players.find((p) => p.id === match.myPlayerId)?.team ?? null,
     fps,
-    players: match.players.map((p) => ({ id: p.id, name: p.name, team: p.team, hp: p.hp, alive: p.alive })),
+    players: queue.map((p) => ({
+      id: p.id,
+      name: p.name,
+      team: p.team,
+      hp: p.hp,
+      alive: p.alive,
+      isMe: p.id === match.myPlayerId,
+      isActive: p.id === match.activeId,
+    })),
   };
 }
 
-/** Painted every frame straight onto the element: a smooth bar can't wait for React state. */
-function PowerFill({ match }: { match: MatchView }) {
-  const fillRef = useRef<HTMLDivElement>(null);
+type Hud = ReturnType<typeof readHud>;
+
+/** Runs `paint` once a frame for as long as the component is mounted. */
+function usePaintLoop(paint: () => void) {
+  const paintRef = useRef(paint);
   useEffect(() => {
-    let frame = requestAnimationFrame(function paint() {
-      fillRef.current!.style.transform = `scaleX(${match.chargeLevel})`;
-      frame = requestAnimationFrame(paint);
+    paintRef.current = paint;
+  });
+  useEffect(() => {
+    let frame = requestAnimationFrame(function loop() {
+      paintRef.current();
+      frame = requestAnimationFrame(loop);
     });
     return () => cancelAnimationFrame(frame);
-  }, [match]);
+  }, []);
+}
+
+/** A bar painted straight onto its element every frame: smooth motion can't wait for React state. */
+function LiveBar({
+  read,
+  className,
+  colorOf,
+}: {
+  read: () => number;
+  className: string;
+  colorOf?: (level: number) => string;
+}) {
+  const fillRef = useRef<HTMLDivElement>(null);
+  usePaintLoop(() => {
+    const fill = fillRef.current;
+    if (!fill) return;
+    const level = read();
+    fill.style.transform = `scaleX(${level})`;
+    if (colorOf) fill.style.backgroundColor = colorOf(level);
+  });
+  return <div ref={fillRef} className={`h-full origin-left ${className}`} style={{ transform: 'scaleX(0)' }} />;
+}
+
+/** Tilted back like a compass lying flat, and turned relative to the camera so it reads "blowing that way". */
+function WindArrow({ match }: { match: MatchView }) {
+  const arrowRef = useRef<SVGSVGElement>(null);
+  usePaintLoop(() => {
+    const arrow = arrowRef.current;
+    if (!arrow) return;
+    const { yaw } = match.active;
+    const ahead = -match.wind.x * Math.sin(yaw) - match.wind.z * Math.cos(yaw);
+    const right = match.wind.x * Math.cos(yaw) - match.wind.z * Math.sin(yaw);
+    const angle = (Math.atan2(right, ahead) * 180) / Math.PI;
+    arrow.style.transform = `perspective(90px) rotateX(50deg) rotateZ(${angle}deg)`;
+  });
   return (
-    <div
-      ref={fillRef}
-      className="h-full origin-left bg-gradient-to-r from-yellow-300 to-red-500"
-      style={{ transform: 'scaleX(0)' }}
-    />
+    <svg ref={arrowRef} viewBox="0 0 24 24" className="h-12 w-12 drop-shadow" aria-hidden="true">
+      <path d="M12 1 22 13h-6v10H8V13H2z" fill="#7dd3fc" stroke="#0c4a6e" strokeWidth="1.5" />
+    </svg>
   );
 }
 
-const TEAM_TEXT = { dog: 'text-amber-300', cat: 'text-slate-200' };
-const TEAM_BAR = { dog: 'bg-amber-400', cat: 'bg-slate-300' };
+function PlayerList({ players }: { players: Hud['players'] }) {
+  const nextId = players.find((p) => !p.isActive && p.alive)?.id;
+  return (
+    <ol className="absolute left-3 top-3 flex w-52 flex-col gap-1.5 border-2 border-black/40 bg-black/50 p-2 text-xs">
+      {players.map((p) => (
+        <li key={p.id} className={p.alive ? '' : 'opacity-40'}>
+          <div className="flex items-center gap-1">
+            <span className="w-3 shrink-0 text-yellow-300" aria-hidden="true">
+              {p.isActive ? '▶' : ''}
+            </span>
+            <span className={`min-w-0 truncate font-bold ${TEAM_TEXT[p.team]} ${p.alive ? '' : 'line-through'}`}>
+              {p.name}
+            </span>
+            {p.isMe && <span className="shrink-0 opacity-70">({strings.you})</span>}
+            <span className="ml-auto shrink-0 tabular-nums">
+              {p.id === nextId ? <span className="mr-1.5 text-sky-200">{strings.next}</span> : null}
+              {p.hp}
+            </span>
+          </div>
+          <div className="ml-4 h-1.5 bg-black/60">
+            <div className={`h-full ${TEAM_BAR[p.team]}`} style={{ width: `${p.hp}%` }} />
+          </div>
+        </li>
+      ))}
+    </ol>
+  );
+}
 
-/** The essential readouts. The minimap and turn list arrive in a later milestone. */
+function TurnStatus({ match, hud }: { match: MatchView; hud: Hud }) {
+  const timed = hud.phase === 'aiming' || hud.phase === 'retreat';
+  const fullTime = hud.phase === 'retreat' ? RETREAT_MS : TURN_MS;
+  return (
+    <div className="absolute left-1/2 top-3 w-72 max-w-[40vw] -translate-x-1/2 border-2 border-black/40 bg-black/50 px-3 py-1.5 text-center">
+      <div className={`truncate font-bold ${TEAM_TEXT[hud.activeTeam]}`}>
+        {hud.isMyTurn ? strings.yourTurn : strings.turnOf(hud.activeName)}
+      </div>
+      <div className="flex items-center justify-center gap-2 text-sm">
+        <span>{strings.phases[hud.phase]}</span>
+        {timed && <span className="font-bold tabular-nums">{hud.secondsLeft}s</span>}
+      </div>
+      {timed && (
+        <div className="mt-1 h-2 overflow-hidden bg-black/60">
+          <LiveBar
+            read={() => Math.min(1, match.phaseMsLeft / fullTime)}
+            className=""
+            colorOf={(level) => (level <= LOW_TIME_RATIO ? '#ef4444' : '#a3e635')}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function WindPanel({ match, hud }: { match: MatchView; hud: Hud }) {
+  return (
+    <div className="absolute right-3 top-3 flex flex-col items-center border-2 border-black/40 bg-black/50 px-4 py-2">
+      <div className="text-xs opacity-80">{strings.wind}</div>
+      <WindArrow match={match} />
+      <div className="mt-1 h-2 w-20 bg-black/60">
+        <div className="h-full bg-sky-300" style={{ width: `${(hud.windStrength / WIND_MAX) * 100}%` }} />
+      </div>
+      <div className="mt-0.5 text-xs tabular-nums">{hud.windStrength.toFixed(1)}</div>
+      {SHOW_FPS && <div className="text-[10px] opacity-60">{hud.fps} FPS</div>}
+    </div>
+  );
+}
+
+function Results({ hud, action }: { hud: Hud; action: ReactNode }) {
+  const { winner, myTeam } = hud;
+  if (!winner) return null;
+  const headline =
+    winner === 'draw' || !myTeam ? strings.winner[winner] : winner === myTeam ? strings.youWon : strings.youLost;
+  const team = (id: 'dog' | 'cat') => (
+    <div className="min-w-0 flex-1">
+      <h3 className={`mb-1 font-bold ${TEAM_TEXT[id]}`}>
+        {strings.teams[id]}
+        {winner === id && ` · ${strings.winnerTag}`}
+      </h3>
+      <ul className="flex flex-col gap-1 text-sm">
+        {hud.players
+          .filter((p) => p.team === id)
+          .map((p) => (
+            <li key={p.id} className="flex justify-between gap-2">
+              <span className={`truncate ${p.alive ? '' : 'line-through opacity-60'}`}>{p.name}</span>
+              <span className="tabular-nums">{p.hp}</span>
+            </li>
+          ))}
+      </ul>
+    </div>
+  );
+  return (
+    <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+      <div className="flex w-[28rem] max-w-[92vw] flex-col gap-4 border-4 border-black/60 bg-stone-900/90 p-5">
+        <div className="text-center">
+          <h2 className="text-4xl font-bold">{headline}</h2>
+          <p className="mt-1 text-sm opacity-70">{strings.turnsPlayed(hud.turnNumber)}</p>
+        </div>
+        <div className="flex gap-6">
+          {team('dog')}
+          {team('cat')}
+        </div>
+        <div className="pointer-events-auto text-center">{action}</div>
+      </div>
+    </div>
+  );
+}
+
 export function GameHud({
   match,
   statsRef,
@@ -67,48 +220,18 @@ export function GameHud({
   const [hud, setHud] = useState(() => readHud(match, 0));
 
   useEffect(() => {
-    const timer = setInterval(() => setHud(readHud(match, statsRef.current.fps)), 50);
+    const timer = setInterval(() => setHud(readHud(match, statsRef.current.fps)), REFRESH_MS);
     return () => clearInterval(timer);
   }, [match, statsRef]);
 
+  const finished = hud.phase === 'finished';
   return (
     <div className="pointer-events-none absolute inset-0 select-none font-mono text-white [text-shadow:0_1px_2px_#000]">
-      <div className="absolute left-3 top-3 border-2 border-black/40 bg-black/50 px-3 py-2">
-        <div className="text-xs opacity-80">{strings.turnNumber(hud.turnNumber)}</div>
-        <div className={`text-lg font-bold ${TEAM_TEXT[hud.activeTeam]}`}>
-          {hud.isMyTurn ? strings.yourTurn : strings.turnOf(hud.activeName)}
-        </div>
-        <div className="text-sm">
-          {strings.phases[hud.phase]}
-          {(hud.phase === 'aiming' || hud.phase === 'retreat') && (
-            <span className="ml-2 text-xl font-bold tabular-nums">{hud.secondsLeft}s</span>
-          )}
-        </div>
-      </div>
-
-      <div className="absolute left-3 top-32 flex w-44 flex-col gap-1 border-2 border-black/40 bg-black/50 p-2 text-xs">
-        {hud.players.map((p) => (
-          <div key={p.id} className={p.alive ? '' : 'line-through opacity-40'}>
-            <div className="flex justify-between">
-              <span className={TEAM_TEXT[p.team]}>{p.name}</span>
-              <span className="tabular-nums">{p.hp}</span>
-            </div>
-            <div className="h-1.5 bg-black/60">
-              <div className={`h-full ${TEAM_BAR[p.team]}`} style={{ width: `${p.hp}%` }} />
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="absolute right-3 top-3 flex flex-col items-center gap-1 border-2 border-black/40 bg-black/50 px-4 py-2">
-        <div className="text-xs opacity-80">{strings.wind}</div>
-        <div className="text-3xl leading-none" style={{ transform: `rotate(${hud.windAngle}deg)` }}>
-          ↑
-        </div>
-        <div className="h-2 w-20 bg-black/60">
-          <div className="h-full bg-sky-300" style={{ width: `${hud.windStrength * 100}%` }} />
-        </div>
-        <div className="text-[10px] opacity-60">{hud.fps} FPS</div>
+      <PlayerList players={hud.players} />
+      <TurnStatus match={match} hud={hud} />
+      <WindPanel match={match} hud={hud} />
+      <div className="absolute bottom-3 right-3">
+        <Minimap match={match} />
       </div>
 
       {hud.showAim && (
@@ -118,28 +241,37 @@ export function GameHud({
         </div>
       )}
 
-      <div className="absolute bottom-10 left-1/2 w-80 -translate-x-1/2">
+      {!finished && hud.phase === 'aiming' && (
+        <div
+          key={hud.turnNumber}
+          role="status"
+          className="turn-banner absolute left-1/2 top-1/4 -translate-x-1/2 whitespace-nowrap text-4xl font-bold"
+        >
+          <span className={hud.isMyTurn ? 'text-yellow-300' : TEAM_TEXT[hud.activeTeam]}>
+            {hud.isMyTurn ? strings.yourTurn : strings.turnOf(hud.activeName)}
+          </span>
+        </div>
+      )}
+
+      <div className="absolute bottom-10 left-1/2 w-80 max-w-[40vw] -translate-x-1/2">
         <div className="mb-1 text-center text-xs opacity-80">{strings.power}</div>
         <div className="h-5 overflow-hidden border-2 border-black/60 bg-black/50">
-          <PowerFill match={match} />
+          <LiveBar read={() => match.chargeLevel} className="bg-gradient-to-r from-yellow-300 to-red-500" />
         </div>
       </div>
-      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 whitespace-nowrap text-xs opacity-80">
-        {strings.controls}
-      </div>
+      {hud.usesMouse && (
+        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 whitespace-nowrap text-xs opacity-80">
+          {strings.controls}
+        </div>
+      )}
 
-      {!locked && hud.usesMouse && hud.phase !== 'finished' && (
+      {!locked && hud.usesMouse && !finished && (
         <div className="absolute left-1/2 top-1/3 -translate-x-1/2 border-2 border-black/40 bg-black/70 px-4 py-2 text-lg">
           {strings.clickToPlay}
         </div>
       )}
 
-      {hud.phase === 'finished' && hud.winner && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/40">
-          <div className="text-5xl font-bold">{strings.winner[hud.winner]}</div>
-          <div className="pointer-events-auto text-lg">{finishedAction}</div>
-        </div>
-      )}
+      {finished && <Results hud={hud} action={finishedAction} />}
     </div>
   );
 }

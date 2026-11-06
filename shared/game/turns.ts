@@ -66,6 +66,25 @@ export function nextTurn(
   return null;
 }
 
+/**
+ * Everyone in the order they will play: the active player, then whoever comes up next,
+ * then anyone with no turn left. With uneven teams a player can play twice before
+ * another, so each appears at their first turn.
+ */
+export function turnQueue(activeId: string, order: TurnOrder, isAlive: (id: string) => boolean): string[] {
+  const queue = new Set([activeId]);
+  const everyone = [...order.dog, ...order.cat];
+  let upcoming = order;
+  for (let i = 0; i < everyone.length * 2; i++) {
+    const next = nextTurn(upcoming, isAlive);
+    if (!next) break;
+    queue.add(next.playerId);
+    upcoming = next.order;
+  }
+  for (const id of everyone) queue.add(id);
+  return [...queue];
+}
+
 export type Outcome = Team | 'draw' | null;
 
 /** Null while the match continues. `turnNumber` is the count of turns already played. */

@@ -10,7 +10,7 @@ export type ChunkMeshData = {
   indices: Uint32Array;
 };
 
-const BLOCK_COLORS: Record<BlockId, [number, number, number]> = {
+export const BLOCK_COLORS: Record<BlockId, [number, number, number]> = {
   [Block.Air]: [0, 0, 0],
   [Block.Bedrock]: [0.2, 0.2, 0.24],
   [Block.Stone]: [0.48, 0.48, 0.5],

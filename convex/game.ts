@@ -462,6 +462,13 @@ export const state = query({
       phaseEndsAt: v.number(),
       chargeStartedAt: v.union(v.number(), v.null()),
       wind: windValidator,
+      order: v.object({
+        dog: v.array(v.string()),
+        cat: v.array(v.string()),
+        dogIndex: v.number(),
+        catIndex: v.number(),
+        nextTeam: teamValidator,
+      }),
       myPlayerId: v.union(v.string(), v.null()),
       players: v.array(
         v.object({
@@ -501,6 +508,7 @@ export const state = query({
       phaseEndsAt: game.phaseEndsAt,
       chargeStartedAt: game.chargeStartedAt,
       wind: game.wind,
+      order: game.order,
       myPlayerId: players.find((p) => p.guestId === guest._id)?._id ?? null,
       players: players.map((p) => ({
         id: p._id,

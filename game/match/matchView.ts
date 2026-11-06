@@ -23,6 +23,8 @@ export type MatchEffect = { kind: 'explosion' | 'splash'; at: Vec3 };
 /** Everything the 3D scene and HUD read. A local hot-seat match and a networked one both provide it. */
 export interface MatchView {
   readonly terrain: Terrain;
+  /** Changes whenever the terrain does, for anything that draws a cached copy of it. */
+  readonly terrainVersion: number;
   readonly players: MatchPlayer[];
   readonly phase: Phase;
   readonly phaseMsLeft: number;
@@ -30,6 +32,8 @@ export interface MatchView {
   readonly wind: Wind;
   readonly activeId: string;
   readonly active: MatchPlayer;
+  /** Every player id, in the order they will play. */
+  readonly turnQueue: string[];
   readonly power: number;
   /** How full to draw the charge bar, from 0 to 1. */
   readonly chargeLevel: number;
