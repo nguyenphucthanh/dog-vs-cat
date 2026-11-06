@@ -5,6 +5,9 @@
   --foreground: #171717;
 }
 
+/* Phones held sideways, and very short windows. */
+@custom-variant short (@media (max-height: 500px));
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

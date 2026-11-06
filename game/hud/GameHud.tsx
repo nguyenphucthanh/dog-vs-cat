@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { strings } from '../../lib/strings';
 import { RETREAT_MS, TURN_MS, WIND_MAX } from '../../shared/game/constants';
+import { TouchControls } from '../input/TouchControls';
+import type { TouchInput } from '../input/touchInput';
 import type { MatchView } from '../match/matchView';
 import type { FrameStats } from '../scene/GameScene';
 import { useMatchSounds, useSoundControls } from '../sound';
@@ -94,7 +96,7 @@ function WindArrow({ match }: { match: MatchView }) {
     arrow.style.transform = `perspective(90px) rotateX(50deg) rotateZ(${angle}deg)`;
   });
   return (
-    <svg ref={arrowRef} viewBox="0 0 24 24" className="h-12 w-12 drop-shadow" aria-hidden="true">
+    <svg ref={arrowRef} viewBox="0 0 24 24" className="h-12 w-12 drop-shadow short:h-7 short:w-7" aria-hidden="true">
       <path d="M12 1 22 13h-6v10H8V13H2z" fill="#7dd3fc" stroke="#0c4a6e" strokeWidth="1.5" />
     </svg>
   );
@@ -103,7 +105,7 @@ function WindArrow({ match }: { match: MatchView }) {
 function PlayerList({ players }: { players: Hud['players'] }) {
   const nextId = players.find((p) => !p.isActive && p.alive)?.id;
   return (
-    <ol className="absolute left-3 top-3 flex w-52 flex-col gap-1.5 border-2 border-black/40 bg-black/50 p-2 text-xs">
+    <ol className="absolute left-3 top-3 flex w-52 flex-col gap-1.5 border-2 border-black/40 bg-black/50 p-2 text-xs short:left-1 short:top-1 short:w-36 short:gap-0 short:border short:p-1 short:text-[10px] short:leading-tight">
       {players.map((p) => (
         <li key={p.id} className={p.alive ? '' : 'opacity-40'}>
           <div className="flex items-center gap-1">
@@ -115,11 +117,11 @@ function PlayerList({ players }: { players: Hud['players'] }) {
             </span>
             {p.isMe && <span className="shrink-0 opacity-70">({strings.you})</span>}
             <span className="ml-auto shrink-0 tabular-nums">
-              {p.id === nextId ? <span className="mr-1.5 text-sky-200">{strings.next}</span> : null}
+              {p.id === nextId ? <span className="mr-1.5 text-sky-200 short:hidden">{strings.next}</span> : null}
               {p.hp}
             </span>
           </div>
-          <div className="ml-4 h-1.5 bg-black/60">
+          <div className="ml-4 h-1.5 bg-black/60 short:hidden">
             <div className={`h-full ${TEAM_BAR[p.team]}`} style={{ width: `${p.hp}%` }} />
           </div>
         </li>
@@ -132,11 +134,11 @@ function TurnStatus({ match, hud }: { match: MatchView; hud: Hud }) {
   const timed = hud.phase === 'aiming' || hud.phase === 'retreat';
   const fullTime = hud.phase === 'retreat' ? RETREAT_MS : TURN_MS;
   return (
-    <div className="absolute left-1/2 top-3 w-72 max-w-[40vw] -translate-x-1/2 border-2 border-black/40 bg-black/50 px-3 py-1.5 text-center">
+    <div className="absolute left-1/2 top-3 w-72 max-w-[40vw] -translate-x-1/2 border-2 border-black/40 bg-black/50 px-3 py-1.5 text-center short:top-1 short:px-2 short:py-0.5 short:text-xs">
       <div className={`truncate font-bold ${TEAM_TEXT[hud.activeTeam]}`}>
         {hud.isMyTurn ? strings.yourTurn : strings.turnOf(hud.activeName)}
       </div>
-      <div className="flex items-center justify-center gap-2 text-sm">
+      <div className="flex items-center justify-center gap-2 text-sm short:text-[10px]">
         <span>{strings.phases[hud.phase]}</span>
         {timed && <span className="font-bold tabular-nums">{hud.secondsLeft}s</span>}
       </div>
@@ -153,15 +155,17 @@ function TurnStatus({ match, hud }: { match: MatchView; hud: Hud }) {
   );
 }
 
-function WindPanel({ match, hud }: { match: MatchView; hud: Hud }) {
+function WindPanel({ match, hud, besideFireButton }: { match: MatchView; hud: Hud; besideFireButton: boolean }) {
   return (
-    <div className="absolute right-3 top-3 flex flex-col items-center border-2 border-black/40 bg-black/50 px-4 py-2">
-      <div className="text-xs opacity-80">{strings.wind}</div>
+    <div
+      className={`absolute top-3 flex flex-col items-center border-2 border-black/40 bg-black/50 px-4 py-2 short:top-1 short:px-2 short:py-0.5 ${besideFireButton ? 'right-[6.5rem]' : 'right-3'}`}
+    >
+      <div className="text-xs opacity-80 short:text-[10px]">{strings.wind}</div>
       <WindArrow match={match} />
-      <div className="mt-1 h-2 w-20 bg-black/60">
+      <div className="mt-1 h-2 w-20 bg-black/60 short:mt-0 short:h-1 short:w-12">
         <div className="h-full bg-sky-300" style={{ width: `${(hud.windStrength / WIND_MAX) * 100}%` }} />
       </div>
-      <div className="mt-0.5 text-xs tabular-nums">{hud.windStrength.toFixed(1)}</div>
+      <div className="mt-0.5 text-xs tabular-nums short:mt-0 short:text-[10px]">{hud.windStrength.toFixed(1)}</div>
       {SHOW_FPS && <div className="text-[10px] opacity-60">{hud.fps} FPS</div>}
     </div>
   );
@@ -179,7 +183,7 @@ function SoundButton() {
         event.stopPropagation(); // Otherwise the click would also capture the mouse.
         toggleMuted();
       }}
-      className="pointer-events-auto absolute bottom-3 left-3 border-2 border-black/40 bg-black/50 px-2 py-1 text-xs hover:bg-black/70"
+      className="pointer-events-auto absolute bottom-3 left-3 border-2 border-black/40 bg-black/50 px-2 py-1 text-xs hover:bg-black/70 short:bottom-0.5 short:left-1 short:border short:px-1 short:py-0 short:text-[10px]"
     >
       {muted ? strings.soundOff : strings.soundOn}
     </button>
@@ -197,7 +201,7 @@ function Results({ hud, action }: { hud: Hud; action: ReactNode }) {
         {strings.teams[id]}
         {winner === id && ` · ${strings.winnerTag}`}
       </h3>
-      <ul className="flex flex-col gap-1 text-sm">
+      <ul className="flex flex-col gap-1 text-sm short:gap-0 short:text-xs">
         {hud.players
           .filter((p) => p.team === id)
           .map((p) => (
@@ -211,10 +215,10 @@ function Results({ hud, action }: { hud: Hud; action: ReactNode }) {
   );
   return (
     <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-      <div className="flex w-[28rem] max-w-[92vw] flex-col gap-4 border-4 border-black/60 bg-stone-900/90 p-5">
+      <div className="flex w-[28rem] max-w-[92vw] flex-col gap-4 border-4 border-black/60 bg-stone-900/90 p-5 short:gap-1.5 short:p-2">
         <div className="text-center">
-          <h2 className="text-4xl font-bold">{headline}</h2>
-          <p className="mt-1 text-sm opacity-70">{strings.turnsPlayed(hud.turnNumber)}</p>
+          <h2 className="text-4xl font-bold short:text-xl">{headline}</h2>
+          <p className="mt-1 text-sm opacity-70 short:mt-0 short:text-xs">{strings.turnsPlayed(hud.turnNumber)}</p>
         </div>
         <div className="flex gap-6">
           {team('dog')}
@@ -230,11 +234,13 @@ export function GameHud({
   match,
   statsRef,
   locked,
+  touch,
   finishedAction,
 }: {
   match: MatchView;
   statsRef: RefObject<FrameStats>;
   locked: boolean;
+  touch: TouchInput | null;
   finishedAction: ReactNode;
 }) {
   const [hud, setHud] = useState(() => readHud(match, 0));
@@ -248,11 +254,12 @@ export function GameHud({
   const finished = hud.phase === 'finished';
   return (
     <div className="pointer-events-none absolute inset-0 select-none font-mono text-white [text-shadow:0_1px_2px_#000]">
+      {touch && <TouchControls input={touch} enabled={hud.usesMouse && !finished} canFire={hud.showAim} />}
       <PlayerList players={hud.players} />
       <TurnStatus match={match} hud={hud} />
-      <WindPanel match={match} hud={hud} />
+      <WindPanel match={match} hud={hud} besideFireButton={touch !== null} />
       <SoundButton />
-      <div className="absolute bottom-3 right-3">
+      <div className="absolute bottom-3 right-3 short:bottom-1 short:right-1">
         <Minimap match={match} />
       </div>
 
@@ -267,7 +274,7 @@ export function GameHud({
         <div
           key={hud.turnNumber}
           role="status"
-          className="turn-banner absolute left-1/2 top-1/4 -translate-x-1/2 whitespace-nowrap text-4xl font-bold"
+          className="turn-banner absolute left-1/2 top-1/4 -translate-x-1/2 whitespace-nowrap text-4xl font-bold short:text-2xl"
         >
           <span className={hud.isMyTurn ? 'text-yellow-300' : TEAM_TEXT[hud.activeTeam]}>
             {hud.isMyTurn ? strings.yourTurn : strings.turnOf(hud.activeName)}
@@ -275,19 +282,19 @@ export function GameHud({
         </div>
       )}
 
-      <div className="absolute bottom-10 left-1/2 w-80 max-w-[40vw] -translate-x-1/2">
-        <div className="mb-1 text-center text-xs opacity-80">{strings.power}</div>
-        <div className="h-5 overflow-hidden border-2 border-black/60 bg-black/50">
+      <div className="absolute bottom-10 left-1/2 w-80 max-w-[40vw] -translate-x-1/2 short:bottom-1">
+        <div className="mb-1 text-center text-xs opacity-80 short:mb-0 short:text-[10px]">{strings.power}</div>
+        <div className="h-5 overflow-hidden border-2 border-black/60 bg-black/50 short:h-3 short:border">
           <LiveBar read={() => match.chargeLevel} className="bg-gradient-to-r from-yellow-300 to-red-500" />
         </div>
       </div>
-      {hud.usesMouse && (
-        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 whitespace-nowrap text-xs opacity-80">
+      {hud.usesMouse && !touch && (
+        <div className="short:hidden absolute bottom-2 left-1/2 -translate-x-1/2 whitespace-nowrap text-xs opacity-80">
           {strings.controls}
         </div>
       )}
 
-      {!locked && hud.usesMouse && !finished && (
+      {!locked && hud.usesMouse && !touch && !finished && (
         <div className="absolute left-1/2 top-1/3 -translate-x-1/2 border-2 border-black/40 bg-black/70 px-4 py-2 text-lg">
           {strings.clickToPlay}
         </div>

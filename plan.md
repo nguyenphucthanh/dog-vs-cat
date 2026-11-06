@@ -95,7 +95,7 @@ app/
   r/[code]/page.tsx Phòng chờ và trận
 game/               Client 3D (chỉ chạy phía client, dynamic import với ssr: false)
   scene/            Terrain chunk mesh, nhân vật, đạn, hiệu ứng, camera
-  input/            Bàn phím + chuột; mobile thêm ở M7, cùng trả về một InputState
+  input/            Bàn phím + chuột, hoặc cảm ứng (M7), cùng trả về một InputState
   hud/              Thanh lực, đồng hồ, gió, minimap, danh sách lượt
   sound.ts
 lib/strings.ts      Chuỗi hiển thị tiếng Việt
@@ -265,6 +265,7 @@ Vì không có đăng nhập, token guest là thứ duy nhất chứng minh danh
 - Joystick trái để đi, vuốt phải để xoay camera, nút bắn ở góc trên, nút nhảy, chế độ ngang, gợi ý xoay màn hình. Thay thế Pointer Lock.
 
 **Xong khi:** chơi trọn trận trên điện thoại cùng với người dùng desktop.
+- Đã kiểm tra bằng Chrome headless giả lập cảm ứng 844×390 đấu với bot qua Convex dev. Trên điện thoại thật: tắt bóng đổ và dpr = 1 để giảm tải, chưa đo FPS.
 
 ---
 

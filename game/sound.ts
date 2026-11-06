@@ -279,11 +279,13 @@ export function useSoundControls(): { muted: boolean; toggleMuted: () => void } 
       else void context?.resume();
     };
     window.addEventListener('pointerdown', unlock);
+    window.addEventListener('touchend', unlock); // iPhones only allow audio to start from here.
     window.addEventListener('keydown', onKeyDown);
     document.addEventListener('visibilitychange', onVisibilityChange);
     return () => {
       document.removeEventListener('visibilitychange', onVisibilityChange);
       window.removeEventListener('pointerdown', unlock);
+      window.removeEventListener('touchend', unlock);
       window.removeEventListener('keydown', onKeyDown);
     };
   }, [toggleMuted]);

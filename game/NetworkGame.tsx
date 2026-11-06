@@ -9,7 +9,7 @@ import type { Id } from '../convex/_generated/dataModel';
 import { errorMessage } from '../lib/guest';
 import { strings } from '../lib/strings';
 import { GameHud } from './hud/GameHud';
-import { createDesktopInput, type InputSource } from './input/input';
+import { useGameInput } from './input/useGameInput';
 import { Button, ErrorText } from './lobby/ui';
 import { NetworkMatch, type MatchTransport } from './match/networkMatch';
 import { GameScene, type FrameStats } from './scene/GameScene';
@@ -39,22 +39,12 @@ function Stage({ token, code, state }: { token: string; code: string; state: Gam
     };
     return new NetworkMatch(state, transport);
   });
-  const [locked, setLocked] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<InputSource | null>(null);
+  const { inputRef, touch, locked } = useGameInput(containerRef);
   const statsRef = useRef<FrameStats>({ fps: 0, hideActive: false, shake: 0 });
   const isWatching = state.activePlayerId !== state.myPlayerId && state.status === 'active';
 
   useEffect(() => match.sync(state), [match, state]);
-
-  useEffect(() => {
-    const input = createDesktopInput(containerRef.current!, setLocked);
-    inputRef.current = input;
-    return () => {
-      input.dispose();
-      inputRef.current = null;
-    };
-  }, []);
 
   // Half the round trip is the best estimate of when the server read its clock.
   useEffect(() => {
@@ -80,15 +70,16 @@ function Stage({ token, code, state }: { token: string; code: string; state: Gam
   }, [match]);
 
   return (
-    <div ref={containerRef} className="fixed inset-0 overflow-hidden bg-sky-300">
+    <div ref={containerRef} className="fixed inset-0 touch-none select-none overflow-hidden bg-sky-300">
       {isWatching && <PoseFeed match={match} gameId={gameId} />}
-      <Canvas flat shadows dpr={[1, 1.5]} camera={{ fov: 70, near: 0.1, far: 400, position: [32, 30, 70] }}>
+      <Canvas flat shadows={!touch} dpr={touch ? 1 : [1, 1.5]} camera={{ fov: 70, near: 0.1, far: 400, position: [32, 30, 70] }}>
         <GameScene match={match} inputRef={inputRef} statsRef={statsRef} />
       </Canvas>
       <GameHud
         match={match}
         statsRef={statsRef}
         locked={locked}
+        touch={touch}
         finishedAction={<BackToRoom token={token} code={code} />}
       />
     </div>

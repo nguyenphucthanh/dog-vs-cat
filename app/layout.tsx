@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 import { ConvexClientProvider } from '@/components/ConvexClientProvider';
@@ -20,6 +20,9 @@ export const metadata: Metadata = {
     icon: '/convex.svg',
   },
 };
+
+// Pinching to zoom would fight with the on-screen controls.
+export const viewport: Viewport = { width: 'device-width', initialScale: 1, maximumScale: 1, userScalable: false };
 
 export default function RootLayout({
   children,

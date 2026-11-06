@@ -68,7 +68,7 @@ export function Minimap({ match }: { match: MatchView }) {
       height={SIZE}
       role="img"
       aria-label={strings.minimap}
-      className="block border-2 border-black/60"
+      className="block border-2 border-black/60 short:h-24 short:w-24"
     />
   );
 }

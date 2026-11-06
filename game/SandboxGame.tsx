@@ -2,7 +2,7 @@
 
 import { Canvas } from '@react-three/fiber';
 import { useEffect, useRef, useState } from 'react';
-import { createDesktopInput, type InputSource } from './input/input';
+import { useGameInput } from './input/useGameInput';
 import { strings } from '../lib/strings';
 import { GameHud } from './hud/GameHud';
 import { LocalMatch } from './match/localMatch';
@@ -20,19 +20,9 @@ function initialSeed() {
 /** Hot-seat match on one machine, for tuning feel before any networking exists. */
 export default function SandboxGame() {
   const [match, setMatch] = useState(() => new LocalMatch(initialSeed()));
-  const [locked, setLocked] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<InputSource | null>(null);
+  const { inputRef, touch, locked } = useGameInput(containerRef);
   const statsRef = useRef<FrameStats>({ fps: 0, hideActive: false, shake: 0 });
-
-  useEffect(() => {
-    const input = createDesktopInput(containerRef.current!, setLocked);
-    inputRef.current = input;
-    return () => {
-      input.dispose();
-      inputRef.current = null;
-    };
-  }, []);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -48,17 +38,17 @@ export default function SandboxGame() {
   }, [match]);
 
   return (
-    <div ref={containerRef} className="fixed inset-0 overflow-hidden bg-sky-300">
+    <div ref={containerRef} className="fixed inset-0 touch-none select-none overflow-hidden bg-sky-300">
       <Canvas
         key={match.seed}
         flat
-        shadows
-        dpr={[1, 1.5]}
+        shadows={!touch}
+        dpr={touch ? 1 : [1, 1.5]}
         camera={{ fov: 70, near: 0.1, far: 400, position: [32, 30, 70] }}
       >
         <GameScene match={match} inputRef={inputRef} statsRef={statsRef} />
       </Canvas>
-      <GameHud match={match} statsRef={statsRef} locked={locked} finishedAction={strings.restart} />
+      <GameHud match={match} statsRef={statsRef} locked={locked} touch={touch} finishedAction={strings.restart} />
     </div>
   );
 }
