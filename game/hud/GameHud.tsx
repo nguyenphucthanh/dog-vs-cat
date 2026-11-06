@@ -5,6 +5,7 @@ import { strings } from '../../lib/strings';
 import { RETREAT_MS, TURN_MS, WIND_MAX } from '../../shared/game/constants';
 import type { MatchView } from '../match/matchView';
 import type { FrameStats } from '../scene/GameScene';
+import { useMatchSounds, useSoundControls } from '../sound';
 import { Minimap } from './Minimap';
 
 const REFRESH_MS = 100; // Text and lists. Anything that moves smoothly paints itself every frame instead.
@@ -166,6 +167,25 @@ function WindPanel({ match, hud }: { match: MatchView; hud: Hud }) {
   );
 }
 
+function SoundButton() {
+  const { muted, toggleMuted } = useSoundControls();
+  return (
+    <button
+      type="button"
+      aria-pressed={!muted}
+      tabIndex={-1} // Space is the fire key, and must never end up pressing this. The M key does the same job.
+      onMouseDown={(event) => event.preventDefault()}
+      onClick={(event) => {
+        event.stopPropagation(); // Otherwise the click would also capture the mouse.
+        toggleMuted();
+      }}
+      className="pointer-events-auto absolute bottom-3 left-3 border-2 border-black/40 bg-black/50 px-2 py-1 text-xs hover:bg-black/70"
+    >
+      {muted ? strings.soundOff : strings.soundOn}
+    </button>
+  );
+}
+
 function Results({ hud, action }: { hud: Hud; action: ReactNode }) {
   const { winner, myTeam } = hud;
   if (!winner) return null;
@@ -218,6 +238,7 @@ export function GameHud({
   finishedAction: ReactNode;
 }) {
   const [hud, setHud] = useState(() => readHud(match, 0));
+  useMatchSounds(match);
 
   useEffect(() => {
     const timer = setInterval(() => setHud(readHud(match, statsRef.current.fps)), REFRESH_MS);
@@ -230,6 +251,7 @@ export function GameHud({
       <PlayerList players={hud.players} />
       <TurnStatus match={match} hud={hud} />
       <WindPanel match={match} hud={hud} />
+      <SoundButton />
       <div className="absolute bottom-3 right-3">
         <Minimap match={match} />
       </div>

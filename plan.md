@@ -256,6 +256,7 @@ Vì không có đăng nhập, token guest là thứ duy nhất chứng minh danh
 
 ### M6: Hoàn thiện
 - Âm thanh, animation đi, rung camera, bản build production, xử lý khi Convex mất kết nối, cân bằng thông số sau playtest.
+- Thêm sau playtest: người xem phát lại pose của người đang chơi bằng bộ đệm trễ theo đồng hồ người gửi (`posePlayback.ts`, cột `livePoses.sentAt`). Đo thật: pose về cách nhau ~294 ms vì mỗi lần gửi chờ round trip, người xem chậm hơn người chơi ~660 ms.
 
 **Xong khi:** chơi trọn trận 4v4 không gặp lỗi chặn trận.
 
@@ -273,7 +274,7 @@ Vì không có đăng nhập, token guest là thứ duy nhất chứng minh danh
 | Game không vui hoặc khó ngắm | M2 kiểm tra trước khi làm mạng |
 | Mutation `fire` chạy quá lâu | Benchmark ở M1. Có thể giảm map hoặc tối ưu terrain |
 | Client và server lệch terrain | Quy tắc số 3 + test tính xác định, có thể so hash terrain khi phát triển |
-| Di chuyển giật ở 5 lần/giây | Nội suy trễ khoảng 200 ms. Nếu chưa đủ, tăng lên 10 lần/giây. Dịch vụ realtime riêng là phương án cuối |
+| Di chuyển giật do pose về thưa (~3,4 lần/giây thực tế) | Đã làm bộ đệm phát trễ ~660 ms. Nếu đường đi quá thô, gửi nhiều mẫu trong một mutation. Dịch vụ realtime riêng là phương án cuối |
 | Vượt hạn mức gói miễn phí Convex | Đo ở M4. Giảm tần suất, chỉ gửi khi có thay đổi |
 | FPS thấp trên máy yếu hoặc mobile | Chunk mesh chỉ có mặt lộ, giới hạn mảnh vỡ, giảm pixel ratio |
 

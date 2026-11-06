@@ -193,6 +193,7 @@ async function beginTurn(
     grounded: true,
     peakY: player.y,
     updatedAt: now,
+    sentAt: undefined,
   });
   await scheduleTimeout(ctx, { _id: game._id, turnNumber, phase: 'aiming' }, duration);
   await touch(ctx, game.roomId);
@@ -305,6 +306,7 @@ type PoseArgs = {
   yaw: number;
   pitch: number;
   grounded: boolean;
+  sentAt?: number;
 };
 
 /**
@@ -331,6 +333,7 @@ const poseArgs = {
   yaw: v.number(),
   pitch: v.number(),
   grounded: v.boolean(),
+  sentAt: v.optional(v.number()),
 };
 
 /** Stores a reachable pose. Returns the fall damage from landing, if any. */
@@ -348,6 +351,7 @@ async function applyPose(ctx: MutationCtx, pose: Pose, next: PoseArgs): Promise<
     grounded: next.grounded,
     peakY: landed ? next.y : peakY,
     updatedAt: now,
+    sentAt: next.sentAt,
   });
   return landed ? fallDamage(peakY - next.y) : 0;
 }
@@ -556,6 +560,7 @@ export const pose = query({
       yaw: v.number(),
       pitch: v.number(),
       grounded: v.boolean(),
+      sentAt: v.union(v.number(), v.null()),
     }),
   ),
   handler: async (ctx, { gameId }) => {
@@ -564,8 +569,8 @@ export const pose = query({
       .withIndex('by_gameId', (q) => q.eq('gameId', gameId))
       .unique();
     if (!live) return null;
-    const { playerId, turnNumber, x, y, z, yaw, pitch, grounded } = live;
-    return { playerId, turnNumber, x, y, z, yaw, pitch, grounded };
+    const { playerId, turnNumber, x, y, z, yaw, pitch, grounded, sentAt } = live;
+    return { playerId, turnNumber, x, y, z, yaw, pitch, grounded, sentAt: sentAt ?? null };
   },
 });
 

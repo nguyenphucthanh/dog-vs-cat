@@ -42,7 +42,7 @@ function Stage({ token, code, state }: { token: string; code: string; state: Gam
   const [locked, setLocked] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<InputSource | null>(null);
-  const statsRef = useRef<FrameStats>({ fps: 0, hideActive: false });
+  const statsRef = useRef<FrameStats>({ fps: 0, hideActive: false, shake: 0 });
   const isWatching = state.activePlayerId !== state.myPlayerId && state.status === 'active';
 
   useEffect(() => match.sync(state), [match, state]);
@@ -98,10 +98,7 @@ function Stage({ token, code, state }: { token: string; code: string; state: Gam
 /** Its own component so several pose updates a second don't re-render the whole scene. */
 function PoseFeed({ match, gameId }: { match: NetworkMatch; gameId: Id<'games'> }) {
   const pose = useQuery(api.game.pose, { gameId });
-  useEffect(() => {
-    match.syncPose(pose ?? null);
-    return () => match.syncPose(null);
-  }, [match, pose]);
+  useEffect(() => match.syncPose(pose ?? null), [match, pose]);
   return null;
 }
 

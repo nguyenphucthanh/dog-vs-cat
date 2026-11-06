@@ -109,5 +109,7 @@ export default defineSchema({
     grounded: v.boolean(),
     peakY: v.number(),
     updatedAt: v.number(),
+    // The sender's own clock, only for other clients to replay movement evenly. Never trusted for anything else.
+    sentAt: v.optional(v.number()),
   }).index('by_gameId', ['gameId']),
 });

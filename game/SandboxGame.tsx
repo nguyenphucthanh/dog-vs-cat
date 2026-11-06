@@ -23,7 +23,7 @@ export default function SandboxGame() {
   const [locked, setLocked] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<InputSource | null>(null);
-  const statsRef = useRef<FrameStats>({ fps: 0, hideActive: false });
+  const statsRef = useRef<FrameStats>({ fps: 0, hideActive: false, shake: 0 });
 
   useEffect(() => {
     const input = createDesktopInput(containerRef.current!, setLocked);

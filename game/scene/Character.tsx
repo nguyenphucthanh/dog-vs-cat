@@ -9,6 +9,10 @@ import type { FrameStats } from './GameScene';
 import { PlayerLabel } from './PlayerLabel';
 
 const AIRBORNE_LEG_SPLIT = 0.7;
+const WALK_SWING = 0.6;
+const WALK_CYCLE_RATE = 10;
+const LEG_EASE_RATE = 25; // Legs settle into each pose rather than snapping when a player stops or lands.
+const BOB_PER_LEG_ANGLE = 0.09;
 
 const LOOKS: Record<Team, { fur: string; dark: string; light: string }> = {
   dog: { fur: '#b5763a', dark: '#6e4420', light: '#efd9b4' },
@@ -73,20 +77,24 @@ export function Character({
   const rightLegRef = useRef<Mesh>(null);
   const bazookaRef = useRef<Group>(null);
   const markerRef = useRef<Mesh>(null);
+  const legAngle = useRef(0);
   const look = LOOKS[player.team];
 
-  useFrame(({ clock }) => {
+  useFrame(({ clock }, delta) => {
     const root = rootRef.current!;
     root.visible = player.alive && !(match.activeId === player.id && statsRef.current.hideActive);
     if (!root.visible) return;
-    root.position.set(player.body.x, player.body.y, player.body.z);
     root.rotation.y = player.yaw;
     bazookaRef.current!.rotation.x = player.pitch;
     // In the air the legs hold a split pose, so hops and falls read as actions.
-    const walkSwing = player.walking ? Math.sin(clock.elapsedTime * 10) * 0.6 : 0;
+    const walkSwing = player.walking ? Math.sin(clock.elapsedTime * WALK_CYCLE_RATE) * WALK_SWING : 0;
     const swing = player.body.grounded ? walkSwing : AIRBORNE_LEG_SPLIT;
-    leftLegRef.current!.rotation.x = swing;
-    rightLegRef.current!.rotation.x = -swing;
+    legAngle.current += (swing - legAngle.current) * (1 - Math.exp(-delta * LEG_EASE_RATE));
+    leftLegRef.current!.rotation.x = legAngle.current;
+    rightLegRef.current!.rotation.x = -legAngle.current;
+    // The body rises a little with each stride.
+    const bob = player.body.grounded ? Math.abs(legAngle.current) * BOB_PER_LEG_ANGLE : 0;
+    root.position.set(player.body.x, player.body.y + bob, player.body.z);
     const marker = markerRef.current!;
     // While the camera sits on this player's shoulder the marker would only block the view.
     marker.visible = match.activeId === player.id && match.focus !== null;

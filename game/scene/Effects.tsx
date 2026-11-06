@@ -1,15 +1,18 @@
 'use client';
 
 import { useFrame } from '@react-three/fiber';
-import { useMemo, useRef } from 'react';
+import { useMemo, useRef, type RefObject } from 'react';
 import { Color, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, Quaternion, Vector3 } from 'three';
 import { EXPLOSION_RADIUS, GRAVITY } from '../../shared/game/constants';
 import type { MatchEffect, MatchView } from '../match/matchView';
+import { playSound } from '../sound';
+import type { FrameStats } from './GameScene';
 
 const MAX_CUBES = 240;
 const CUBES_PER_EXPLOSION = 60;
 const CUBES_PER_SPLASH = 24;
 const FLASH_SECONDS = 0.35;
+const SHAKE_REACH = 45; // An explosion further from the camera than this doesn't shake it.
 
 type Cube = { x: number; y: number; z: number; vx: number; vy: number; vz: number; life: number; size: number };
 
@@ -17,7 +20,7 @@ const EXPLOSION_COLORS = ['#7a5230', '#9a9a9f', '#5a8f3c', '#ff9d2e', '#3c3c3c']
 const SPLASH_COLOR = new Color('#a8dcf0');
 
 /** Block-shaped debris and a flash. Purely visual, so it may use Math.random freely. */
-export function Effects({ match }: { match: MatchView }) {
+export function Effects({ match, statsRef }: { match: MatchView; statsRef: RefObject<FrameStats> }) {
   const cubesRef = useRef<InstancedMesh>(null);
   const flashRef = useRef<Mesh>(null);
   const flashAgeRef = useRef(Infinity);
@@ -57,8 +60,16 @@ export function Effects({ match }: { match: MatchView }) {
     }
   };
 
-  useFrame((_, delta) => {
-    for (const effect of match.drainEffects()) spawn(effect);
+  useFrame(({ camera }, delta) => {
+    for (const effect of match.drainEffects()) {
+      spawn(effect);
+      playSound(effect.kind);
+      if (effect.kind === 'explosion') {
+        const { x, y, z } = effect.at;
+        const closeness = 1 - camera.position.distanceTo(scratch.position.set(x, y, z)) / SHAKE_REACH;
+        statsRef.current.shake = Math.max(statsRef.current.shake, closeness);
+      }
+    }
 
     const mesh = cubesRef.current!;
     const { matrix, position, scale, rotation } = scratch;

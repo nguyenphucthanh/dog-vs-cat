@@ -69,7 +69,10 @@ export const strings = {
   wind: 'Gió',
   power: 'Lực bắn',
   clickToPlay: 'Bấm để điều khiển chuột',
-  controls: 'WASD: đi • E: nhảy • Chuột: ngắm • Giữ Space: gồng lực, nhả để bắn',
+  controls: 'WASD: đi • E: nhảy • Chuột: ngắm • Giữ Space: gồng lực, nhả để bắn • M: bật/tắt tiếng',
+  soundOn: 'Âm thanh: bật',
+  soundOff: 'Âm thanh: tắt',
+  reconnecting: 'Mất kết nối, đang thử kết nối lại...',
   winner: { dog: 'Chó thắng!', cat: 'Mèo thắng!', draw: 'Hòa!' },
   restart: 'Nhấn R để chơi ván mới',
 };

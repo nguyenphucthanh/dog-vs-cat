@@ -25,6 +25,8 @@ const FOLLOW_HEIGHT = 3.5;
 const SNAP_AFTER_SECONDS = 0.5; // Mouse look must be direct, so easing stops once back on the shoulder.
 const PREVIEW_LENGTH = 3;
 const PREVIEW_DOTS = 6;
+const SHAKE_SECONDS = 0.7;
+const SHAKE_ANGLE = 0.05; // Radians, at full strength.
 
 const NO_INPUT = { moveForward: 0, moveRight: 0, jump: false, fire: false, yawDelta: 0, pitchDelta: 0 };
 
@@ -32,6 +34,8 @@ export type FrameStats = {
   fps: number;
   /** True when walls squeeze the camera so close that the active character would fill the screen. */
   hideActive: boolean;
+  /** How hard the camera is shaking, from 0 to 1. */
+  shake: number;
 };
 
 /** Runs the match, then points the camera. Negative priority: before everything that draws. */
@@ -48,6 +52,7 @@ function MatchDriver({
   const shoulderSeconds = useRef(0);
   const followed = useRef({ id: '', y: 0 });
   const frames = useRef({ count: 0, seconds: 0 });
+  const reducedMotion = useMemo(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches, []);
   const scratch = useMemo(
     () => ({
       target: new Vector3(),
@@ -124,6 +129,18 @@ function MatchDriver({
     const ease = snapped ? 1 : 1 - Math.exp(-delta * (onShoulder ? 10 : 6));
     camera.position.lerp(target, ease);
     camera.quaternion.slerp(quaternion, ease);
+
+    const { shake } = statsRef.current;
+    if (shake > 0) {
+      // Turning rather than moving: the next frame's easing pulls it straight back, so it can't drift away.
+      if (!reducedMotion) {
+        const angle = shake * shake * SHAKE_ANGLE;
+        camera.rotateX((Math.random() * 2 - 1) * angle);
+        camera.rotateY((Math.random() * 2 - 1) * angle);
+        camera.rotateZ((Math.random() * 2 - 1) * angle);
+      }
+      statsRef.current.shake = Math.max(0, shake - delta / SHAKE_SECONDS);
+    }
   }, -1);
 
   return null;
@@ -229,7 +246,7 @@ function Scene({
       ))}
       <AimPreview match={match} />
       <ProjectileView match={match} />
-      <Effects match={match} />
+      <Effects match={match} statsRef={statsRef} />
 
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[center, WATER_SURFACE - 0.1, center]}>
         <planeGeometry args={[600, 600]} />

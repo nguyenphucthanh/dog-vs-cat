@@ -209,6 +209,23 @@ describe('moving', () => {
     expect(pose.x).toBe(start.x);
   });
 
+  it('passes on when a pose was sent, and forgets it when the turn changes', async () => {
+    const ctx = await startedGame();
+    expect((await ctx.poseOf()).sentAt).toBeNull();
+    const token = await ctx.activeToken();
+    const { turnNumber } = await ctx.state();
+    await ctx.t.mutation(api.game.updatePose, {
+      token,
+      gameId: ctx.gameId,
+      turnNumber,
+      ...(await ctx.aim()),
+      sentAt: 12345,
+    });
+    expect((await ctx.poseOf()).sentAt).toBe(12345);
+    await ctx.timeout('aiming');
+    expect((await ctx.poseOf()).sentAt).toBeNull();
+  });
+
   it('ignores a stale pose from an earlier turn', async () => {
     const { t, gameId, activeToken, aim, poseOf } = await startedGame();
     const token = await activeToken();
@@ -457,6 +474,35 @@ describe('ending', () => {
     });
   };
 
+  it('plays a full 4v4 to the end, with the teams taking turns', async () => {
+    const ctx = await startedGame(4);
+    const teams: string[] = [];
+    for (let i = 0; i < 300 && (await ctx.state()).status === 'active'; i++) {
+      const game = await ctx.state();
+      const alive = (team: string) => game.players.some((p) => p.team === team && p.alive);
+      if (alive('dog') && alive('cat')) teams.push(game.players.find((p) => p.id === game.activePlayerId)!.team);
+      // Straight down at their own feet: every shot costs the shooter health, so the match has to end.
+      await ctx.t.mutation(api.game.fire, {
+        token: await ctx.activeToken(),
+        gameId: ctx.gameId,
+        power: 0.2,
+        ...(await ctx.aim()),
+        pitch: -1.4,
+      });
+      await ctx.timeout('resolving');
+      if ((await ctx.state()).status === 'active' && (await ctx.state()).phase === 'retreat') {
+        await ctx.timeout('retreat');
+      }
+    }
+    const end = await ctx.state();
+    expect(end.status).toBe('finished');
+    expect(end.winner).not.toBeNull();
+    expect(new Set(end.players.map((p) => p.id)).size).toBe(8);
+    expect(teams.length).toBeGreaterThan(8);
+    // Each shooter only hurts themselves here, so both teams stay in the rotation until one is gone.
+    for (let i = 1; i < teams.length; i++) expect(teams[i]).not.toBe(teams[i - 1]);
+  }, 60_000);
+
   it('names the winner when one team is wiped out', async () => {
     const ctx = await startedGame(2);
     const game = await ctx.state();
@@ -469,7 +515,10 @@ describe('ending', () => {
   });
 
   it('is a draw when both teams die', async () => {
+    // A fixed map: on some random ones the ground between them is uneven enough to put the second player out of range.
+    const random = vi.spyOn(Math, 'random').mockReturnValue(0.1);
     const ctx = await startedGame();
+    random.mockRestore();
     const game = await ctx.state();
     const token = await ctx.activeToken();
     await ctx.t.run(async (run) => {

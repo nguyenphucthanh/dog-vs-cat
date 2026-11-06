@@ -1,4 +1,4 @@
-import { MAX_PITCH, POSE_INTERVAL_MS, SIM_DT } from '../../shared/game/constants';
+import { MAX_PITCH, POSE_INTERVAL_MS } from '../../shared/game/constants';
 import { createBody, stepBody } from '../../shared/game/player';
 import {
   aimToVelocity,
@@ -13,6 +13,7 @@ import { turnQueue, type Outcome, type Team, type TurnOrder } from '../../shared
 import type { FrameInput } from '../input/input';
 import { MatchCore, STEP_MS, type ReplayShot } from './matchCore';
 import type { MatchPlayer, MatchView, Phase } from './matchView';
+import { PosePlayback } from './posePlayback';
 
 export type ServerPlayer = Vec3 & {
   id: string;
@@ -47,9 +48,11 @@ export type LivePose = Vec3 & {
   yaw: number;
   pitch: number;
   grounded: boolean;
+  /** When the active player sent this, by their clock. Null until they have sent anything this turn. */
+  sentAt: number | null;
 };
 
-export type PoseReport = Vec3 & { yaw: number; pitch: number; grounded: boolean };
+export type PoseReport = Vec3 & { yaw: number; pitch: number; grounded: boolean; sentAt: number };
 
 /** How the match talks to the server. Each returns when the server has answered. */
 export type MatchTransport = {
@@ -57,16 +60,6 @@ export type MatchTransport = {
   beginCharge(): Promise<unknown>;
   fire(power: number, pose: PoseReport): Promise<unknown>;
 };
-
-const FOLLOW_RATE = 10; // How quickly another player's body catches up with their reported pose.
-const SNAP_DISTANCE = 6;
-const WALKING_EPSILON = 0.002;
-const FOLLOW_STEP = 1 - Math.exp(-SIM_DT * FOLLOW_RATE);
-
-function shortestAngle(from: number, to: number): number {
-  const difference = (to - from) % (Math.PI * 2);
-  return ((difference + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
-}
 
 /**
  * A client's view of a match the server runs. The server decides everything; this
@@ -82,7 +75,7 @@ export class NetworkMatch extends MatchCore implements MatchView {
   status: GameSnapshot['status'];
 
   private snapshot: GameSnapshot;
-  private target: LivePose | null = null;
+  private playback = new PosePlayback();
   private clockOffsetMs = 0;
   private carvedCount = 0;
   private replayedTurn = 0;
@@ -196,7 +189,7 @@ export class NetworkMatch extends MatchCore implements MatchView {
       this.fireSent = false;
       this.fireNeedsRelease = true;
       this.chargeMs = null;
-      this.target = null;
+      this.playback = new PosePlayback();
       this.lastPoseKey = '';
     }
     if (next.phase !== 'aiming') this.chargeMs = null;
@@ -211,7 +204,7 @@ export class NetworkMatch extends MatchCore implements MatchView {
     if (isNewShot) this.replayedTurn = shot.turnNumber;
     if (liveReplay) {
       this.ownsBody = false;
-      this.target = null;
+      this.jumpToNewestPose();
       this.adoptShot(shot);
     } else if (isNewShot) {
       this.cancelPrediction();
@@ -222,7 +215,22 @@ export class NetworkMatch extends MatchCore implements MatchView {
 
   /** Takes in the active player's reported position, when that isn't this client. */
   syncPose(pose: LivePose | null): void {
-    this.target = pose && pose.turnNumber === this.turnNumber && pose.playerId === this.activeId ? pose : null;
+    if (!pose || pose.sentAt === null || this.isReplaying) return;
+    if (pose.turnNumber !== this.turnNumber || pose.playerId !== this.activeId) return;
+    this.playback.push({ ...pose, sentAt: pose.sentAt }, Date.now());
+  }
+
+  /** Playback runs behind, but a shot leaves from where the player really is. */
+  private jumpToNewestPose(): void {
+    const newest = this.playback.stop();
+    if (!newest || this.activeId === this.myPlayerId) return;
+    const player = this.active;
+    player.body.x = newest.x;
+    player.body.y = newest.y;
+    player.body.z = newest.z;
+    player.body.grounded = newest.grounded;
+    player.yaw = newest.yaw;
+    player.pitch = newest.pitch;
   }
 
   private applyServerPlayers(): void {
@@ -231,7 +239,7 @@ export class NetworkMatch extends MatchCore implements MatchView {
       player.hp = server.hp;
       player.alive = server.alive;
       if (server.id === this.myPlayerId && this.ownsBody) continue;
-      if (server.id === this.activeId && this.target) continue;
+      if (server.id === this.activeId && this.playback.hasPose) continue;
       player.body = { ...createBody(server), grounded: true };
       player.yaw = server.yaw;
       player.pitch = server.pitch;
@@ -263,9 +271,13 @@ export class NetworkMatch extends MatchCore implements MatchView {
       this.moveMyself(input);
       if (this.serverPhase === 'aiming') this.updateCharge(input);
       this.reportPose();
-    } else if (this.activeId !== this.myPlayerId) {
-      this.followActive();
     }
+  }
+
+  override update(frameMs: number, input: FrameInput): void {
+    super.update(frameMs, input);
+    // Every frame rather than every step: this position comes from a clock, not from simulating.
+    if (this.activeId !== this.myPlayerId && this.status === 'active' && !this.isReplaying) this.followActive();
   }
 
   private moveMyself(input: FrameInput): void {
@@ -279,7 +291,7 @@ export class NetworkMatch extends MatchCore implements MatchView {
     stepBody(this.terrain, player.body, { moveX, moveZ, jump: input.jump });
   }
 
-  private poseReport(): PoseReport {
+  private currentPose(): Omit<PoseReport, 'sentAt'> {
     const { body, yaw, pitch } = this.active;
     return { x: body.x, y: body.y, z: body.z, yaw, pitch, grounded: body.grounded };
   }
@@ -287,7 +299,7 @@ export class NetworkMatch extends MatchCore implements MatchView {
   private reportPose(): void {
     this.poseCooldownMs -= STEP_MS;
     if (this.poseCooldownMs > 0 || this.poseInFlight) return;
-    const pose = this.poseReport();
+    const pose = this.currentPose();
     const key = JSON.stringify(pose);
     if (key === this.lastPoseKey) return;
     this.lastPoseKey = key;
@@ -295,7 +307,7 @@ export class NetworkMatch extends MatchCore implements MatchView {
     this.poseInFlight = true;
     // Never let poses queue up behind a slow connection: the newest one is all that matters.
     this.transport
-      .sendPose(this.turnNumber, pose)
+      .sendPose(this.turnNumber, { ...pose, sentAt: Date.now() })
       .catch(() => {})
       .finally(() => (this.poseInFlight = false));
   }
@@ -315,7 +327,7 @@ export class NetworkMatch extends MatchCore implements MatchView {
       this.fireSent = true;
       this.fireNeedsRelease = true;
       this.chargeMs = null;
-      const pose = this.poseReport();
+      const pose = { ...this.currentPose(), sentAt: Date.now() };
       this.predictShot(power);
       // If this fails the server still knows a charge began, and fires when the turn runs out.
       this.transport.fire(power, pose).catch(() => this.cancelPrediction());
@@ -339,25 +351,15 @@ export class NetworkMatch extends MatchCore implements MatchView {
   }
 
   private followActive(): void {
-    const target = this.target;
-    if (!target) return;
+    const pose = this.playback.read(Date.now());
+    if (!pose) return;
     const player = this.active;
-    const { body } = player;
-    const dx = target.x - body.x;
-    const dy = target.y - body.y;
-    const dz = target.z - body.z;
-    if (Math.hypot(dx, dy, dz) > SNAP_DISTANCE) {
-      body.x = target.x;
-      body.y = target.y;
-      body.z = target.z;
-    } else {
-      body.x += dx * FOLLOW_STEP;
-      body.y += dy * FOLLOW_STEP;
-      body.z += dz * FOLLOW_STEP;
-    }
-    body.grounded = target.grounded;
-    player.walking = Math.hypot(dx, dz) * FOLLOW_STEP > WALKING_EPSILON;
-    player.yaw += shortestAngle(player.yaw, target.yaw) * FOLLOW_STEP;
-    player.pitch += (target.pitch - player.pitch) * FOLLOW_STEP;
+    player.body.x = pose.x;
+    player.body.y = pose.y;
+    player.body.z = pose.z;
+    player.body.grounded = pose.grounded;
+    player.walking = pose.moving;
+    player.yaw = pose.yaw;
+    player.pitch = pose.pitch;
   }
 }

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CHARGE_MS, EXPLOSION_PAUSE_MS, TURN_MS } from '../../shared/game/constants';
 import { generateTerrain, pickSpawns, topSolidY } from '../../shared/game/terrain';
 import type { FrameInput } from '../input/input';
@@ -274,45 +274,72 @@ describe('NetworkMatch', () => {
         yaw,
         pitch,
         grounded: true,
+        sentAt: Date.now(),
         ...overrides,
       };
     };
 
-    it('glides towards their reported position instead of jumping', () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+    });
+    afterEach(() => vi.useRealTimers());
+
+    const play = (match: NetworkMatch, ms: number) => {
+      for (let t = 0; t < ms; t += 16) {
+        vi.advanceTimersByTime(16);
+        match.update(16, IDLE);
+      }
+    };
+
+    it('walks them at a steady pace between reported positions', () => {
       const { match } = watching();
       const startX = match.active.body.x;
-      match.syncPose(poseOf(match, { x: startX + 1 }));
-      run(match, 32);
-      expect(match.active.body.x).toBeGreaterThan(startX);
-      expect(match.active.body.x).toBeLessThan(startX + 0.5);
+      match.syncPose(poseOf(match));
+      play(match, 300);
+      match.syncPose(poseOf(match, { x: startX + 1.5 }));
+      play(match, 150);
+      const halfway = match.active.body.x;
+      expect(halfway).toBeGreaterThan(startX);
+      expect(halfway).toBeLessThan(startX + 1.5);
       expect(match.active.walking).toBe(true);
-      run(match, 1000);
-      expect(match.active.body.x).toBeCloseTo(startX + 1, 1);
+      play(match, 2000);
+      expect(match.active.body.x).toBe(startX + 1.5);
+      expect(match.active.walking).toBe(false);
     });
 
-    it('turns the short way round', () => {
-      const { match } = watching();
-      match.active.yaw = 3;
-      match.syncPose(poseOf(match, { yaw: -3 }));
-      run(match, 2000);
-      expect(Math.abs(Math.sin(match.active.yaw - -3))).toBeLessThan(0.05);
-      expect(Math.abs(match.active.yaw)).toBeGreaterThan(3);
-    });
-
-    it('jumps straight there when far behind', () => {
-      const { match } = watching();
-      const x = match.active.body.x + 20;
-      match.syncPose(poseOf(match, { x }));
-      run(match, 32);
-      expect(match.active.body.x).toBe(x);
-    });
-
-    it('ignores a pose from an earlier turn', () => {
+    it('ignores a pose from an earlier turn, or one nobody has sent yet', () => {
       const { match } = watching();
       const startX = match.active.body.x;
       match.syncPose(poseOf(match, { x: startX + 1, turnNumber: 0 }));
-      run(match, 500);
+      match.syncPose(poseOf(match, { x: startX + 1, sentAt: null }));
+      play(match, 500);
       expect(match.active.body.x).toBe(startX);
+    });
+
+    it('fires from where the player really is, even though playback runs behind', () => {
+      const { match } = watching();
+      const startX = match.active.body.x;
+      match.syncPose(poseOf(match));
+      play(match, 300);
+      match.syncPose(poseOf(match, { x: startX + 1.5 }));
+      const at = { x: 32.5, y: 40, z: 32.5 };
+      match.sync(
+        snapshot({
+          activePlayerId: 'them',
+          phase: 'resolving',
+          craters: [at],
+          lastShot: {
+            turnNumber: 1,
+            origin: at,
+            velocity: { x: 0, y: 0, z: 0 },
+            wind: { x: 0, z: 0 },
+            flightMs: 500,
+            impact: at,
+            hits: [],
+          },
+        }),
+      );
+      expect(match.active.body.x).toBe(startX + 1.5);
     });
 
     it('shows the charge bar from the server', () => {
