@@ -10,6 +10,7 @@ import { errorMessage, useGuestToken } from '../../lib/guest';
 import { strings } from '../../lib/strings';
 import { NetworkGame } from '../NetworkGameLoader';
 import { NameForm } from './NameForm';
+import { TeamFace } from './TeamFace';
 import { Button, ErrorText, Screen } from './ui';
 import { useRoomPresence } from './useRoomPresence';
 
@@ -17,9 +18,9 @@ type RoomView = NonNullable<FunctionReturnType<typeof api.rooms.view>>;
 type Member = RoomView['members'][number];
 type Team = Member['team'];
 
-const TEAM_STYLES: Record<Team, { panel: string; title: string }> = {
-  dog: { panel: 'border-amber-800 bg-amber-100', title: 'text-amber-900' },
-  cat: { panel: 'border-slate-700 bg-slate-200', title: 'text-slate-800' },
+const TEAM_STYLES: Record<Team, { panel: string; banner: string; title: string }> = {
+  dog: { panel: 'border-amber-800 bg-amber-100', banner: 'bg-amber-300', title: 'text-amber-950' },
+  cat: { panel: 'border-slate-700 bg-slate-200', banner: 'bg-slate-400', title: 'text-slate-900' },
 };
 
 function Centered({ children }: { children: React.ReactNode }) {
@@ -140,7 +141,7 @@ function Lobby({ token, room, onLeaving }: { token: string; room: RoomView; onLe
 
   return (
     <Screen>
-      <div className="flex w-full max-w-3xl flex-col gap-4">
+      <div className="flex w-full max-w-3xl flex-col gap-4 pb-8">
         <header className="flex flex-wrap items-center justify-between gap-3 border-4 border-stone-800 bg-amber-50 p-4">
           <div>
             <div className="text-sm text-stone-600">{strings.roomLabel}</div>
@@ -149,69 +150,87 @@ function Lobby({ token, room, onLeaving }: { token: string; room: RoomView; onLe
           <Button onClick={() => void copyLink()}>{copied ? strings.copied : strings.copyLink}</Button>
         </header>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <TeamPanel team="dog" members={room.members} />
-          <TeamPanel team="cat" members={room.members} />
+        <div className="grid gap-3 sm:grid-cols-[1fr_auto_1fr]">
+          <TeamPanel team="dog" members={room.members} isMine={me.team === 'dog'} />
+          <div className="self-center justify-self-center border-4 border-stone-800 bg-stone-800 px-2 py-1 font-mono text-lg font-black text-amber-50">
+            {strings.versus}
+          </div>
+          <TeamPanel team="cat" members={room.members} isMine={me.team === 'cat'} />
         </div>
 
         <div className="flex flex-col gap-3 border-4 border-stone-800 bg-amber-50 p-4">
-          <div className="flex flex-wrap gap-2">
-            <Button onClick={() => act(setTeam({ token, code, team: otherTeam }))}>
-              {strings.switchTo(strings.teams[otherTeam])}
-            </Button>
-            {!me.isHost && (
+          {/* Leaving sits apart on the left, and the way forward is always furthest right. */}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <Button onClick={() => void leaveRoom()}>{strings.leaveRoom}</Button>
+            <div className="ml-auto flex flex-wrap justify-end gap-2">
               <Button
-                variant={me.ready ? 'secondary' : 'primary'}
-                onClick={() => act(setReady({ token, code, ready: !me.ready }))}
+                className="flex items-center gap-2"
+                onClick={() => act(setTeam({ token, code, team: otherTeam }))}
               >
-                {me.ready ? strings.unready : strings.ready}
+                <TeamFace team={otherTeam} className="h-5 w-5" />
+                {strings.switchTo(strings.teams[otherTeam])}
               </Button>
-            )}
-            {me.isHost && (
-              <Button
-                variant="primary"
-                disabled={room.startProblem !== null}
-                onClick={() => act(start({ token, code }))}
-              >
-                {strings.startGame}
-              </Button>
-            )}
-            <Button className="sm:ml-auto" onClick={() => void leaveRoom()}>
-              {strings.leaveRoom}
-            </Button>
+              {me.isHost ? (
+                <Button
+                  variant="primary"
+                  disabled={room.startProblem !== null}
+                  onClick={() => act(start({ token, code }))}
+                >
+                  {strings.startGame}
+                </Button>
+              ) : (
+                <Button
+                  variant={me.ready ? 'secondary' : 'primary'}
+                  onClick={() => act(setReady({ token, code, ready: !me.ready }))}
+                >
+                  {me.ready ? strings.unready : strings.ready}
+                </Button>
+              )}
+            </div>
           </div>
-          {me.isHost && room.startProblem && <p className="text-stone-700">{strings.errors[room.startProblem]}</p>}
-          <ErrorText>{error}</ErrorText>
+          <div className="text-right empty:hidden">
+            {me.isHost && room.startProblem && <p className="text-stone-700">{strings.errors[room.startProblem]}</p>}
+            <ErrorText>{error}</ErrorText>
+          </div>
         </div>
       </div>
     </Screen>
   );
 }
 
-function TeamPanel({ team, members }: { team: Team; members: Member[] }) {
+function TeamPanel({ team, members, isMine }: { team: Team; members: Member[]; isMine: boolean }) {
   const onTeam = members.filter((member) => member.team === team);
   const styles = TEAM_STYLES[team];
   return (
-    <section className={`border-4 p-4 ${styles.panel}`}>
-      <h2 className={`mb-3 text-2xl font-black ${styles.title}`}>
-        {strings.teams[team]} <span className="text-base font-bold opacity-70">({onTeam.length})</span>
-      </h2>
-      {onTeam.length === 0 ? (
-        <p className="text-stone-600">{strings.emptyTeam}</p>
-      ) : (
-        <ul className="flex flex-col gap-2">
-          {onTeam.map((member) => (
-            <MemberRow key={member.id} member={member} />
-          ))}
-        </ul>
-      )}
+    <section className={`border-4 ${styles.panel}`}>
+      <header className={`flex items-center gap-3 p-3 ${styles.banner}`}>
+        <TeamFace team={team} className="h-14 w-14" />
+        <div className="min-w-0">
+          <h2 className={`text-2xl font-black ${styles.title}`}>
+            {strings.teams[team]} <span className="text-base font-bold opacity-70">({onTeam.length})</span>
+          </h2>
+          {isMine && <p className={`text-xs font-bold ${styles.title}`}>{strings.yourTeam}</p>}
+        </div>
+      </header>
+      <div className="min-h-24 p-3">
+        {onTeam.length === 0 ? (
+          <p className="text-stone-600">{strings.emptyTeam}</p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {onTeam.map((member) => (
+              <MemberRow key={member.id} member={member} />
+            ))}
+          </ul>
+        )}
+      </div>
     </section>
   );
 }
 
 function MemberRow({ member }: { member: Member }) {
   return (
-    <li className={`flex flex-wrap items-center gap-2 bg-white/70 px-3 py-2 ${member.online ? '' : 'opacity-50'}`}>
+    <li className={`flex flex-wrap items-center gap-2 bg-white/70 px-2 py-2 ${member.online ? '' : 'opacity-50'}`}>
+      <TeamFace team={member.team} className="h-6 w-6" />
       <span className="min-w-0 truncate font-bold">{member.name}</span>
       {member.isMe && <span className="text-xs text-stone-600">({strings.you})</span>}
       <span className="ml-auto flex items-center gap-1 text-xs font-bold">

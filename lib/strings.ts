@@ -49,6 +49,8 @@ export const strings = {
   leaveRoom: 'Rời phòng',
   backHome: 'Về trang chủ',
   emptyTeam: 'Chưa có ai',
+  yourTeam: 'Đội của bạn',
+  versus: 'VS',
   yourTurn: 'Lượt của bạn!',
   next: 'Kế tiếp',
   minimap: 'Bản đồ nhỏ: vị trí của mọi người chơi trên đảo',

@@ -3,8 +3,8 @@
 import { useFrame } from '@react-three/fiber';
 import { useRef, type RefObject } from 'react';
 import type { Group, Mesh } from 'three';
-import type { Team } from '../../shared/game/turns';
 import type { MatchPlayer, MatchView } from '../match/matchView';
+import { TEAM_LOOKS } from '../teamLooks';
 import type { FrameStats } from './GameScene';
 import { PlayerLabel } from './PlayerLabel';
 
@@ -13,11 +13,6 @@ const WALK_SWING = 0.6;
 const WALK_CYCLE_RATE = 10;
 const LEG_EASE_RATE = 25; // Legs settle into each pose rather than snapping when a player stops or lands.
 const BOB_PER_LEG_ANGLE = 0.09;
-
-const LOOKS: Record<Team, { fur: string; dark: string; light: string }> = {
-  dog: { fur: '#b5763a', dark: '#6e4420', light: '#efd9b4' },
-  cat: { fur: '#8c8f99', dark: '#4d4f58', light: '#e6e6ea' },
-};
 
 function Box({
   size,
@@ -78,7 +73,7 @@ export function Character({
   const bazookaRef = useRef<Group>(null);
   const markerRef = useRef<Mesh>(null);
   const legAngle = useRef(0);
-  const look = LOOKS[player.team];
+  const look = TEAM_LOOKS[player.team];
 
   useFrame(({ clock }, delta) => {
     const root = rootRef.current!;
