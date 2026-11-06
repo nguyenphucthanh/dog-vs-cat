@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+'use client';
+
+import { useEffect, useSyncExternalStore } from 'react';
 import type { MatchEffect, MatchView } from './match/matchView';
 import { windDrift } from './scene/windDrift';
 
@@ -9,6 +11,8 @@ type Sound = Cue | MatchEffect['kind'] | 'step';
 const MUTE_KEY = 'dog-vs-cat:muted';
 const COUNTDOWN_FROM_SECONDS = 5;
 const MASTER_VOLUME = 0.6;
+const MUSIC_URL = '/music/game-bg-music.ogg';
+const MUSIC_VOLUME = 0.3; // Under the master volume, and well below the sound effects it plays behind.
 const STEP_INTERVAL_MS = 314; // Two footfalls per walk cycle of the legs in Character.tsx.
 const NOISE_SECONDS = 4; // Long enough that the wind's loop can't be heard repeating.
 const WIND_VOLUME = 0.16; // At full strength.
@@ -75,6 +79,7 @@ let noise: AudioBuffer | null = null;
 let chargeHum: { oscillator: OscillatorNode; gain: GainNode } | null = null;
 let windNoise: { source: AudioBufferSourceNode; filter: BiquadFilterNode; gain: GainNode } | null = null;
 let muted = readMuted();
+const muteListeners = new Set<() => void>();
 
 function readMuted(): boolean {
   try {
@@ -253,42 +258,90 @@ export function useMatchSounds(match: MatchView): void {
   }, [match]);
 }
 
-/** Unlocks audio on the first input, and handles muting with the M key. */
-export function useSoundControls(): { muted: boolean; toggleMuted: () => void } {
-  const [isMuted, setIsMuted] = useState(muted);
-  const toggleMuted = useCallback(() => {
-    muted = !muted;
-    setIsMuted(muted);
-    if (master) master.gain.value = muted ? 0 : MASTER_VOLUME;
-    try {
-      localStorage.setItem(MUTE_KEY, muted ? '1' : '0');
-    } catch {
-      // Without storage the choice only lasts until the page reloads.
-    }
-  }, []);
+/** Decoded whole rather than streamed, because only that loops with no gap at the seam. */
+async function startMusic(): Promise<void> {
+  const { context, master } = audio();
+  const response = await fetch(MUSIC_URL);
+  const buffer = await context.decodeAudioData(await response.arrayBuffer());
+  const source = context.createBufferSource();
+  source.buffer = buffer;
+  source.loop = true;
+  const gain = context.createGain();
+  gain.gain.value = MUSIC_VOLUME;
+  source.connect(gain);
+  gain.connect(master);
+  source.start();
+}
 
+/**
+ * Lives in the root layout, so music carries on across every screen. Browsers keep audio
+ * silent until the player has done something, so everything starts from the first input.
+ */
+export function AudioUnlock(): null {
   useEffect(() => {
-    const unlock = () => void audio().context.resume();
-    const onKeyDown = (event: KeyboardEvent) => {
-      unlock();
-      if (event.code === 'KeyM' && !event.repeat && !event.metaKey && !event.ctrlKey) toggleMuted();
+    let musicStarted = false;
+    const unlock = () => {
+      void audio().context.resume();
+      if (musicStarted) return;
+      musicStarted = true;
+      startMusic().catch(() => {}); // A browser that can't play this format still has all the other sounds.
     };
     // Frames stop in a hidden tab, which would leave the wind and the charge hum droning on with nothing to end them.
     const onVisibilityChange = () => {
       if (document.hidden) void context?.suspend();
-      else void context?.resume();
+      else if (musicStarted) void context?.resume();
     };
     window.addEventListener('pointerdown', unlock);
     window.addEventListener('touchend', unlock); // iPhones only allow audio to start from here.
-    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keydown', unlock);
     document.addEventListener('visibilitychange', onVisibilityChange);
     return () => {
-      document.removeEventListener('visibilitychange', onVisibilityChange);
       window.removeEventListener('pointerdown', unlock);
       window.removeEventListener('touchend', unlock);
-      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keydown', unlock);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
     };
-  }, [toggleMuted]);
+  }, []);
+  return null;
+}
+
+/** Whether a key press here is someone typing, rather than a command to the game. */
+export function isTypingIn(target: { tagName?: string } | null): boolean {
+  return target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA';
+}
+
+function toggleMuted(): void {
+  muted = !muted;
+  if (master) master.gain.value = muted ? 0 : MASTER_VOLUME;
+  try {
+    localStorage.setItem(MUTE_KEY, muted ? '1' : '0');
+  } catch {
+    // Without storage the choice only lasts until the page reloads.
+  }
+  muteListeners.forEach((listener) => listener());
+}
+
+function subscribeToMute(listener: () => void): () => void {
+  muteListeners.add(listener);
+  return () => muteListeners.delete(listener);
+}
+
+/** The muted state, plus muting with the M key while a component using this is on screen. */
+export function useSoundControls(): { muted: boolean; toggleMuted: () => void } {
+  const isMuted = useSyncExternalStore(
+    subscribeToMute,
+    () => muted,
+    () => false, // The server can't know, so the first render assumes sound is on.
+  );
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.code !== 'KeyM' || event.repeat || event.metaKey || event.ctrlKey) return;
+      if (!isTypingIn(event.target as HTMLElement | null)) toggleMuted();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   return { muted: isMuted, toggleMuted };
 }

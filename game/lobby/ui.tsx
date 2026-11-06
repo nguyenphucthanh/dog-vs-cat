@@ -1,4 +1,5 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
+import { SoundButton } from '../SoundButton';
 
 const BUTTON_STYLES = {
   primary: 'bg-amber-400 text-stone-900 border-amber-700 hover:bg-amber-300',
@@ -22,7 +23,10 @@ export function Button({
 
 export function Screen({ children }: { children: ReactNode }) {
   return (
-    <main className="flex min-h-screen flex-col items-center bg-sky-200 px-4 py-8 text-stone-900">{children}</main>
+    <main className="flex min-h-screen flex-col items-center bg-sky-200 px-4 py-8 text-stone-900">
+      {children}
+      <SoundButton className="fixed bottom-2 right-2 border-2 border-stone-400 bg-white px-2 py-1 text-xs font-bold text-stone-800 hover:bg-stone-100" />
+    </main>
   );
 }
 

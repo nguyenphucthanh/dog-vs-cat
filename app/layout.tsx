@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 import { ConvexClientProvider } from '@/components/ConvexClientProvider';
+import { AudioUnlock } from '@/game/sound';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -32,6 +33,7 @@ export default function RootLayout({
   return (
     <html lang="vi">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+        <AudioUnlock />
         <ConvexClientProvider>{children}</ConvexClientProvider>
       </body>
     </html>

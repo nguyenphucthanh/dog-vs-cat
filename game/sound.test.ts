@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { advanceSteps, matchCues, type CueState } from './sound';
+import { advanceSteps, isTypingIn, matchCues, type CueState } from './sound';
 
 const state = (overrides: Partial<CueState> = {}): CueState => ({
   turnNumber: 1,
@@ -90,5 +90,14 @@ describe('advanceSteps', () => {
 
   it('does not rush when walking keeps flickering on and off', () => {
     expect(walkFor(3200, (t) => Math.floor(t / 48) % 2 === 0)).toBeLessThanOrEqual(11);
+  });
+});
+
+describe('isTypingIn', () => {
+  it('leaves the M key alone while typing a name or room code', () => {
+    expect(isTypingIn({ tagName: 'INPUT' })).toBe(true);
+    expect(isTypingIn({ tagName: 'TEXTAREA' })).toBe(true);
+    expect(isTypingIn({ tagName: 'BODY' })).toBe(false);
+    expect(isTypingIn(null)).toBe(false);
   });
 });
