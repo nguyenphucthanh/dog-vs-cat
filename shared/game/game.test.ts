@@ -7,8 +7,11 @@ import {
   GRAVITY,
   MAP_HEIGHT,
   MAP_SIZE,
+  MAX_FLIGHT_MS,
+  MAX_PITCH,
   MAX_TURNS,
   PROJECTILE_SPEED,
+  SHOT_TIME_SCALE,
   SIM_DT,
   WALK_SPEED,
   WATER_SURFACE,
@@ -17,7 +20,14 @@ import {
 } from './constants';
 import { explosionDamage, explosionKnockback, resolveExplosion, resolveShot } from './explosion';
 import { createBody, fallDamage, settleBody, stepBody } from './player';
-import { aimToVelocity, chargeLevel, powerFromCharge, previewArc, simulateProjectile } from './projectile';
+import {
+  aimToVelocity,
+  chargeLevel,
+  powerFromCharge,
+  previewArc,
+  simulateProjectile,
+  stepProjectile,
+} from './projectile';
 import {
   Block,
   buildTerrain,
@@ -137,7 +147,7 @@ describe('projectile', () => {
     const flight = simulateProjectile({ ...shot, velocity: { x: 20, y: 0, z: 0 }, wind: NO_WIND });
     const expectedTime = Math.sqrt((2 * dropHeight) / GRAVITY);
     expect(flight.outcome).toBe('water');
-    expect(flight.flightMs / 1000).toBeCloseTo(expectedTime, 1);
+    expect((flight.flightMs / 1000) * SHOT_TIME_SCALE).toBeCloseTo(expectedTime, 1);
     expect(flight.point.x).toBeCloseTo(origin.x + 20 * expectedTime, 0);
     expect(flight.point.z).toBe(origin.z);
   });
@@ -145,7 +155,7 @@ describe('projectile', () => {
   it('is pushed in the direction of the wind by the expected amount', () => {
     const wind = { x: 0, z: 3 };
     const flight = simulateProjectile({ ...shot, velocity: { x: 20, y: 0, z: 0 }, wind });
-    const time = flight.flightMs / 1000;
+    const time = (flight.flightMs / 1000) * SHOT_TIME_SCALE;
     expect(flight.point.z - origin.z).toBeCloseTo(0.5 * 3 * time * time, 0);
   });
 
@@ -490,5 +500,37 @@ describe('performance budget', () => {
     const best = Math.min(...samples);
     console.log(`resolveShot budget: best ${best.toFixed(1)} ms, all ${samples.map((s) => s.toFixed(1)).join(', ')}`);
     expect(best).toBeLessThan(100);
+  });
+});
+
+describe('how long a shot takes', () => {
+  const noPlayers = { shooterId: 'me', players: [] };
+
+  it('stretches the flight without moving the path', () => {
+    const velocity = { x: 12, y: 16, z: -8 };
+    const wind = { x: 2, z: -1 };
+    const position = { x: 10, y: 20, z: 10 };
+    const current = { ...velocity };
+    const seconds = 1;
+    const steps = Math.round(seconds / SIM_DT / SHOT_TIME_SCALE);
+    for (let i = 0; i < steps; i++) stepProjectile(position, current, wind);
+    // The true parabola, one second of path in: reached after 1 / SHOT_TIME_SCALE seconds of real time.
+    expect(position.x).toBeCloseTo(10 + 12 + 0.5 * wind.x, 6);
+    expect(position.y).toBeCloseTo(20 + 16 - 0.5 * GRAVITY, 6);
+    expect(position.z).toBeCloseTo(10 - 8 + 0.5 * wind.z, 6);
+  });
+
+  it('lands the highest possible lob before the flight limit runs out', () => {
+    const terrain = generateTerrain(1);
+    const flight = simulateProjectile({
+      ...noPlayers,
+      terrain,
+      origin: { x: 32, y: MAP_HEIGHT + 2, z: 32 },
+      velocity: aimToVelocity(0, MAX_PITCH, 1),
+      wind: { x: 0, z: 0 },
+    });
+    expect(flight.outcome).not.toBe('out');
+    expect(flight.flightMs).toBeLessThan(MAX_FLIGHT_MS);
+    expect(flight.flightMs).toBeGreaterThan(4000);
   });
 });

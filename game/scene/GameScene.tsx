@@ -11,6 +11,7 @@ import type { MatchView } from '../match/matchView';
 import { Character } from './Character';
 import { Effects } from './Effects';
 import { TerrainView } from './TerrainView';
+import { WindEffects } from './WindEffects';
 
 const SHOULDER_BACK = 4.5;
 const SHOULDER_RIGHT = 0.9;
@@ -247,6 +248,7 @@ function Scene({
       <AimPreview match={match} />
       <ProjectileView match={match} />
       <Effects match={match} statsRef={statsRef} />
+      <WindEffects match={match} />
 
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[center, WATER_SURFACE - 0.1, center]}>
         <planeGeometry args={[600, 600]} />

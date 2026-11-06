@@ -1,13 +1,20 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { MatchEffect, MatchView } from './match/matchView';
+import { windDrift } from './scene/windDrift';
 
 /** Every sound is synthesised, so there are no audio files to load or license. */
-export type Cue = 'fire' | 'myTurn' | 'tick' | 'win' | 'lose';
-type Sound = Cue | MatchEffect['kind'];
+export type Cue = 'fire' | 'myTurn' | 'tick' | 'win' | 'lose' | 'jump' | 'land';
+type Sound = Cue | MatchEffect['kind'] | 'step';
 
 const MUTE_KEY = 'dog-vs-cat:muted';
 const COUNTDOWN_FROM_SECONDS = 5;
 const MASTER_VOLUME = 0.6;
+const STEP_INTERVAL_MS = 314; // Two footfalls per walk cycle of the legs in Character.tsx.
+const NOISE_SECONDS = 4; // Long enough that the wind's loop can't be heard repeating.
+const WIND_VOLUME = 0.16; // At full strength.
+const WIND_LOW_HZ = 300;
+const WIND_HIGH_HZ = 1000;
+const WIND_EASE_SECONDS = 0.4; // How quickly the sound follows a gust or a new turn's wind.
 
 export type CueState = {
   turnNumber: number;
@@ -16,11 +23,16 @@ export type CueState = {
   secondsLeft: number;
   flying: boolean;
   won: boolean;
+  grounded: boolean;
+  y: number;
 };
 
 export function readCueState(match: MatchView): CueState {
   const myTeam = match.players.find((p) => p.id === match.myPlayerId)?.team;
+  const { body } = match.active;
   return {
+    grounded: body.grounded,
+    y: body.y,
     turnNumber: match.turnNumber,
     phase: match.phase,
     controllable: match.controllable,
@@ -43,13 +55,25 @@ export function matchCues(previous: CueState, next: CueState): Cue[] {
     next.secondsLeft <= COUNTDOWN_FROM_SECONDS;
   if (countingDown) cues.push('tick');
   if (next.phase === 'finished' && previous.phase !== 'finished') cues.push(next.won ? 'win' : 'lose');
+
+  // Being blown about by a shot, or the camera moving on to another player, isn't jumping.
+  const sameBody = next.turnNumber === previous.turnNumber && next.phase !== 'resolving' && next.phase !== 'finished';
+  if (sameBody && previous.grounded && !next.grounded && next.y > previous.y) cues.push('jump');
+  if (sameBody && !previous.grounded && next.grounded) cues.push('land');
   return cues;
+}
+
+/** The time since the last footfall, and whether another one is due. Stopping for a moment can't make steps rush. */
+export function advanceSteps(timerMs: number, frameMs: number, walking: boolean): { timerMs: number; step: boolean } {
+  const timer = Math.min(STEP_INTERVAL_MS, timerMs + frameMs);
+  return walking && timer >= STEP_INTERVAL_MS ? { timerMs: 0, step: true } : { timerMs: timer, step: false };
 }
 
 let context: AudioContext | null = null;
 let master: GainNode | null = null;
 let noise: AudioBuffer | null = null;
 let chargeHum: { oscillator: OscillatorNode; gain: GainNode } | null = null;
+let windNoise: { source: AudioBufferSourceNode; filter: BiquadFilterNode; gain: GainNode } | null = null;
 let muted = readMuted();
 
 function readMuted(): boolean {
@@ -66,7 +90,7 @@ function audio() {
     master = context.createGain();
     master.gain.value = muted ? 0 : MASTER_VOLUME;
     master.connect(context.destination);
-    noise = context.createBuffer(1, context.sampleRate, context.sampleRate);
+    noise = context.createBuffer(1, context.sampleRate * NOISE_SECONDS, context.sampleRate);
     const samples = noise.getChannelData(0);
     for (let i = 0; i < samples.length; i++) samples[i] = Math.random() * 2 - 1;
   }
@@ -106,7 +130,7 @@ function burst(type: BiquadFilterType, from: number, to: number, seconds: number
   filter.frequency.exponentialRampToValueAtTime(to, startAt + seconds);
   source.connect(filter);
   filter.connect(envelope(volume, startAt, seconds));
-  source.start(startAt);
+  source.start(startAt, Math.random() * NOISE_SECONDS); // A different stretch each time, so no two sound identical.
   source.stop(startAt + seconds);
 }
 
@@ -128,6 +152,15 @@ const SOUNDS: Record<Sound, () => void> = {
   tick: () => tone('square', 1000, 1000, 0.05, 0.08),
   win: () => melody([523, 659, 784, 1047], 0.13),
   lose: () => melody([392, 330, 262], 0.2),
+  step: () => burst('lowpass', 350 + Math.random() * 250, 120, 0.09, 0.3),
+  jump() {
+    burst('lowpass', 700, 250, 0.1, 0.2);
+    tone('triangle', 220, 480, 0.13, 0.18);
+  },
+  land() {
+    burst('lowpass', 500, 80, 0.14, 0.45);
+    tone('sine', 120, 50, 0.1, 0.3);
+  },
 };
 
 /** Browsers keep audio silent until the player has done something, and before that there's nothing to play. */
@@ -137,12 +170,12 @@ export function playSound(sound: Sound): void {
 
 /** A rising hum while a shot charges. Zero stops it. */
 function setChargeHum(level: number): void {
-  if (context?.state !== 'running') return;
   if (level <= 0) {
     chargeHum?.oscillator.stop();
     chargeHum = null;
     return;
   }
+  if (context?.state !== 'running') return;
   if (!chargeHum) {
     const { context, master } = audio();
     const oscillator = context.createOscillator();
@@ -157,20 +190,65 @@ function setChargeHum(level: number): void {
   chargeHum.oscillator.frequency.value = 120 + level * 500;
 }
 
+/** Air rushing past, louder and higher as `amount` goes from 0 to 1. Gusts come and go by themselves. */
+function setWindNoise(amount: number, seconds: number): void {
+  if (amount <= 0) {
+    windNoise?.source.stop();
+    windNoise = null;
+    return;
+  }
+  if (context?.state !== 'running') return;
+  if (!windNoise) {
+    const { context, master, noise } = audio();
+    const source = context.createBufferSource();
+    source.buffer = noise;
+    source.loop = true;
+    const filter = context.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.Q.value = 0.7;
+    const gain = context.createGain();
+    gain.gain.value = 0;
+    source.connect(filter);
+    filter.connect(gain);
+    gain.connect(master);
+    source.start();
+    windNoise = { source, filter, gain };
+  }
+  const gust = 0.75 + 0.15 * Math.sin(seconds * 0.7) + 0.1 * Math.sin(seconds * 1.9);
+  const now = windNoise.source.context.currentTime;
+  windNoise.gain.gain.setTargetAtTime(WIND_VOLUME * amount * amount * gust, now, WIND_EASE_SECONDS);
+  windNoise.filter.frequency.setTargetAtTime(
+    (WIND_LOW_HZ + (WIND_HIGH_HZ - WIND_LOW_HZ) * amount) * gust,
+    now,
+    WIND_EASE_SECONDS,
+  );
+}
+
 /** Plays whatever the match calls for, for as long as the component is mounted. */
 export function useMatchSounds(match: MatchView): void {
   useEffect(() => {
     let previous = { ...readCueState(match), turnNumber: 0 }; // So the first turn is announced too.
-    let frame = requestAnimationFrame(function loop() {
+    let stepTimerMs = STEP_INTERVAL_MS;
+    let lastFrameAt = performance.now();
+    let frame = requestAnimationFrame(function loop(now) {
       const next = readCueState(match);
       for (const cue of matchCues(previous, next)) playSound(cue);
       setChargeHum(match.chargeLevel);
+      setWindNoise(next.phase === 'finished' ? 0 : windDrift(match.wind).amount, now / 1000);
+
+      const { walking, alive } = match.active;
+      const steps = advanceSteps(stepTimerMs, now - lastFrameAt, walking && next.grounded && alive);
+      stepTimerMs = steps.timerMs;
+      if (steps.step) playSound('step');
+
+      lastFrameAt = now;
       previous = next;
       frame = requestAnimationFrame(loop);
     });
     return () => {
       cancelAnimationFrame(frame);
       setChargeHum(0);
+      setWindNoise(0, 0);
     };
   }, [match]);
 }
@@ -195,9 +273,16 @@ export function useSoundControls(): { muted: boolean; toggleMuted: () => void } 
       unlock();
       if (event.code === 'KeyM' && !event.repeat && !event.metaKey && !event.ctrlKey) toggleMuted();
     };
+    // Frames stop in a hidden tab, which would leave the wind and the charge hum droning on with nothing to end them.
+    const onVisibilityChange = () => {
+      if (document.hidden) void context?.suspend();
+      else void context?.resume();
+    };
     window.addEventListener('pointerdown', unlock);
     window.addEventListener('keydown', onKeyDown);
+    document.addEventListener('visibilitychange', onVisibilityChange);
     return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
       window.removeEventListener('pointerdown', unlock);
       window.removeEventListener('keydown', onKeyDown);
     };

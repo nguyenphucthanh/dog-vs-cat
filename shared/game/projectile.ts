@@ -11,6 +11,7 @@ import {
   PLAYER_WIDTH,
   PROJECTILE_SPEED,
   SHOOTER_IMMUNE_MS,
+  SHOT_TIME_SCALE,
   SIM_DT,
   WATER_SURFACE,
 } from './constants';
@@ -69,7 +70,7 @@ export function chargeLevel(chargeMs: number): number {
 }
 
 /** Exact for constant acceleration, so the path is a true parabola at any step size. */
-export function stepProjectile(position: Vec3, velocity: Vec3, wind: Wind, dt = SIM_DT): void {
+export function stepProjectile(position: Vec3, velocity: Vec3, wind: Wind, dt = SIM_DT * SHOT_TIME_SCALE): void {
   position.x += velocity.x * dt + 0.5 * wind.x * dt * dt;
   position.y += velocity.y * dt - 0.5 * GRAVITY * dt * dt;
   position.z += velocity.z * dt + 0.5 * wind.z * dt * dt;
@@ -111,7 +112,7 @@ export function simulateProjectile({ terrain, shooterId, origin, velocity, wind,
     const from = { ...position };
     stepProjectile(position, current, wind);
     const flightMs = (step + 1) * SIM_DT * 1000;
-    const shooterImmune = flightMs <= SHOOTER_IMMUNE_MS;
+    const shooterImmune = flightMs * SHOT_TIME_SCALE <= SHOOTER_IMMUNE_MS;
 
     // Sample along the segment: a falling shot can cross more than a block per step.
     const distance = Math.hypot(position.x - from.x, position.y - from.y, position.z - from.z);

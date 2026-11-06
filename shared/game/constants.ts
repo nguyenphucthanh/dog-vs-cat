@@ -44,12 +44,13 @@ export const FALL_DAMAGE_PER_BLOCK = 5;
 
 // Bazooka
 export const PROJECTILE_SPEED = 40;
+export const SHOT_TIME_SCALE = 0.5; // Below 1, shots take longer on the same path. Aiming and range don't change.
 export const MIN_POWER = 0.15;
 export const CHARGE_MS = 2_000;
 export const POWER_TOLERANCE = 0.25; // Network slack when validating a client's power.
 export const MAX_FLIGHT_MS = 10_000;
 export const FLIGHT_MARGIN = 32; // How far past the map edge a shot stays alive.
-export const SHOOTER_IMMUNE_MS = 200; // Lets a shot leave the barrel.
+export const SHOOTER_IMMUNE_MS = 200; // Lets a shot leave the barrel. Before SHOT_TIME_SCALE stretches it.
 export const MUZZLE_HEIGHT = 1.4;
 export const MUZZLE_REACH = 0.9;
 export const MAX_PITCH = 1.4;

@@ -256,6 +256,7 @@ Vì không có đăng nhập, token guest là thứ duy nhất chứng minh danh
 
 ### M6: Hoàn thiện
 - Âm thanh, animation đi, rung camera, bản build production, xử lý khi Convex mất kết nối, cân bằng thông số sau playtest.
+- Thêm sau playtest 2v2: đạn bay chậm hơn trên cùng đường bay (`SHOT_TIME_SCALE`), lá và vệt gió trong cảnh (`WindEffects.tsx`).
 - Thêm sau playtest: người xem phát lại pose của người đang chơi bằng bộ đệm trễ theo đồng hồ người gửi (`posePlayback.ts`, cột `livePoses.sentAt`). Đo thật: pose về cách nhau ~294 ms vì mỗi lần gửi chờ round trip, người xem chậm hơn người chơi ~660 ms.
 
 **Xong khi:** chơi trọn trận 4v4 không gặp lỗi chặn trận.
