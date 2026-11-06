@@ -31,6 +31,8 @@ export interface MatchView {
   readonly activeId: string;
   readonly active: MatchPlayer;
   readonly power: number;
+  /** How full to draw the charge bar, from 0 to 1. */
+  readonly chargeLevel: number;
   readonly winner: Outcome;
   readonly projectile: { position: Vec3; velocity: Vec3 } | null;
   /** Where the camera should look while a shot plays out. */

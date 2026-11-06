@@ -35,7 +35,7 @@ function PowerFill({ match }: { match: MatchView }) {
   const fillRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     let frame = requestAnimationFrame(function paint() {
-      fillRef.current!.style.transform = `scaleX(${match.power})`;
+      fillRef.current!.style.transform = `scaleX(${match.chargeLevel})`;
       frame = requestAnimationFrame(paint);
     });
     return () => cancelAnimationFrame(frame);

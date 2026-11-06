@@ -1,7 +1,7 @@
 import { MAX_HP, MAX_PITCH, RETREAT_MS, SPAWN_PITCH, TURN_MS } from '../../shared/game/constants';
 import { resolveShot } from '../../shared/game/explosion';
 import { createBody, isDrowned, settleBody, stepBody } from '../../shared/game/player';
-import { aimToVelocity, muzzlePosition, powerFromCharge, type Wind } from '../../shared/game/projectile';
+import { aimToVelocity, chargeLevel, muzzlePosition, powerFromCharge, type Wind } from '../../shared/game/projectile';
 import { generateTerrain, pickSpawns, spawnYaw, type Vec3 } from '../../shared/game/terrain';
 import {
   createTurnOrder,
@@ -63,6 +63,10 @@ export class LocalMatch extends MatchCore implements MatchView {
 
   get power(): number {
     return this.chargeMs === null ? 0 : powerFromCharge(this.chargeMs);
+  }
+
+  get chargeLevel(): number {
+    return this.chargeMs === null ? 0 : chargeLevel(this.chargeMs);
   }
 
   get showAimUi(): boolean {

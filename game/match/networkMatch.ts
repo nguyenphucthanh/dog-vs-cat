@@ -2,6 +2,7 @@ import { MAX_PITCH, POSE_INTERVAL_MS, SIM_DT } from '../../shared/game/constants
 import { createBody, stepBody } from '../../shared/game/player';
 import {
   aimToVelocity,
+  chargeLevel,
   muzzlePosition,
   powerFromCharge,
   simulateProjectile,
@@ -144,10 +145,20 @@ export class NetworkMatch extends MatchCore implements MatchView {
   }
 
   get power(): number {
-    if (this.chargeMs !== null) return powerFromCharge(this.chargeMs);
-    if (this.myPlayerId === this.activeId) return 0; // My own bar never waits on the server.
+    const held = this.heldMs();
+    return held === null ? 0 : powerFromCharge(held);
+  }
+
+  get chargeLevel(): number {
+    const held = this.heldMs();
+    return held === null ? 0 : chargeLevel(held);
+  }
+
+  private heldMs(): number | null {
+    if (this.chargeMs !== null) return this.chargeMs;
+    if (this.myPlayerId === this.activeId) return null; // My own bar never waits on the server.
     const started = this.snapshot.chargeStartedAt;
-    return started === null ? 0 : powerFromCharge(this.serverNow() - started);
+    return started === null ? null : this.serverNow() - started;
   }
 
   get showAimUi(): boolean {

@@ -17,7 +17,7 @@ import {
 } from './constants';
 import { explosionDamage, explosionKnockback, resolveExplosion, resolveShot } from './explosion';
 import { createBody, fallDamage, settleBody, stepBody } from './player';
-import { aimToVelocity, previewArc, simulateProjectile } from './projectile';
+import { aimToVelocity, chargeLevel, powerFromCharge, previewArc, simulateProjectile } from './projectile';
 import {
   Block,
   buildTerrain,
@@ -198,6 +198,14 @@ describe('projectile', () => {
     expect(aimToVelocity(0, Math.PI / 2, 1).y).toBeCloseTo(PROJECTILE_SPEED);
     expect(Math.hypot(...Object.values(aimToVelocity(1, 0.3, 99)))).toBeCloseTo(PROJECTILE_SPEED);
     expect(Math.hypot(...Object.values(aimToVelocity(1, 0.3, 0)))).toBeCloseTo(PROJECTILE_SPEED * 0.15);
+  });
+
+  it('fills the bar from zero while power keeps its minimum, and they meet above it', () => {
+    expect(chargeLevel(0)).toBe(0);
+    expect(powerFromCharge(0)).toBeCloseTo(0.15);
+    expect(chargeLevel(1000)).toBe(powerFromCharge(1000));
+    expect(chargeLevel(99_999)).toBe(1);
+    expect(chargeLevel(-50)).toBe(0);
   });
 
   it('previews only the start of the arc', () => {

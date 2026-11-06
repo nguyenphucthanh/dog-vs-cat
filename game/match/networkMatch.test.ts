@@ -91,6 +91,22 @@ describe('NetworkMatch', () => {
       expect(transport.fire).toHaveBeenCalledTimes(1);
     });
 
+    it('grows the bar from empty with no jump or stall, while a quick tap keeps minimum power', () => {
+      const { match } = setup();
+      run(match, 32);
+      match.update(32, FIRE);
+      const levels = [match.chargeLevel];
+      expect(levels[0]).toBeLessThan(0.05);
+      expect(match.power).toBeCloseTo(0.15);
+      for (let i = 0; i < 40; i++) {
+        match.update(16, FIRE);
+        levels.push(match.chargeLevel);
+      }
+      // Every couple of frames the bar has moved on: nothing sits still at the start of a charge.
+      for (let i = 2; i < levels.length; i++) expect(levels[i]).toBeGreaterThan(levels[i - 2]);
+      expect(levels[40]).toBeCloseTo(0.33, 1);
+    });
+
     it('fires by itself when the bar fills', () => {
       const { match, transport } = setup();
       run(match, 32);

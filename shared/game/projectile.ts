@@ -63,6 +63,11 @@ export function powerFromCharge(chargeMs: number): number {
   return Math.min(1, Math.max(MIN_POWER, chargeMs / CHARGE_MS));
 }
 
+/** How full the charge bar looks: follows the time held from zero, so it never jumps or stalls at the start. */
+export function chargeLevel(chargeMs: number): number {
+  return Math.min(1, Math.max(0, chargeMs / CHARGE_MS));
+}
+
 /** Exact for constant acceleration, so the path is a true parabola at any step size. */
 export function stepProjectile(position: Vec3, velocity: Vec3, wind: Wind, dt = SIM_DT): void {
   position.x += velocity.x * dt + 0.5 * wind.x * dt * dt;
